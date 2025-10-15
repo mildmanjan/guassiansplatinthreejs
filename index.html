@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal to Gaussian Splat Scene</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        #instructions {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 300px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(74, 158, 255, 0.3);
+            z-index: 100;
+        }
+        #instructions h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            color: #4a9eff;
+        }
+        #instructions ul {
+            list-style: none;
+            padding: 0;
+        }
+        #instructions li {
+            margin: 8px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        #instructions li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #4a9eff;
+        }
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 10px;
+            min-width: 300px;
+            z-index: 1000;
+        }
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #4a9eff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #portal-prompt {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    background: rgba(74, 158, 255, 0.9);
+    padding: 20px 40px;
+    border-radius: 10px;
+    font-size: 18px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 200;
+}
+
+#portal-prompt.show {
+    opacity: 1;
+}
+        #file-info {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div id="loading">
+        <div class="spinner"></div>
+        <div id="loading-text">Loading Scene...</div>
+        <div style="font-size: 14px; margin-top: 10px; color: #aaa;">
+            Place your .ply file in the same folder
+        </div>
+    </div>
+    
+    <div id="instructions" style="display: none;">
+        <h2>🌀 Portal Controls</h2>
+        <ul>
+            <li>Left click + drag to orbit</li>
+            <li>Scroll to zoom in/out</li>
+            <li>Navigate closer to portal</li>
+            <li>See Gaussian splat through portal!</li>
+        </ul>
+    </div>
+    
+    <div id="file-info" style="display: none;">
+        <div>📁 <span id="file-name">Loading...</span></div>
+        <div>📊 <span id="splat-info">Initializing...</span></div>
+        <div>🎨 Gaussian Splatting Active</div>
+    </div>
+<div id="portal-prompt">
+    Click portal to enter the 3D scene!
+</div>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import * as GaussianSplats3D from 'https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@latest/build/gaussian-splats-3d.module.min.js';
+
+        // ====== CONFIGURATION ======
+        // UPDATE THIS PATH to match your .ply file location
+        const SPLAT_FILE = 'InteriorDesign.ply';
+        const USE_PLACEHOLDER = false;
+
+        // ====== MAIN SCENE SETUP ======
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a0a);
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 1.6, 5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 2;
+        controls.maxDistance = 15;
+        controls.maxPolarAngle = Math.PI / 2;
+        controls.target.set(0, 1.6, -3);
+
+        // ====== LIGHTING ======
+        scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 5, 5);
+        scene.add(dirLight);
+        const pointLight = new THREE.PointLight(0x4a9eff, 0.5);
+        pointLight.position.set(-3, 2, 0);
+        scene.add(pointLight);
+
+        // ====== ROOM GEOMETRY ======
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(20, 20),
+            new THREE.MeshStandardMaterial({ color: 0x2a2a2a })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -1;
+        scene.add(floor);
+
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, side: THREE.DoubleSide });
+        const backWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 8), wallMat);
+        backWall.position.set(0, 3, -5);
+        scene.add(backWall);
+
+        const cube = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 0.8, 0.8),
+            new THREE.MeshStandardMaterial({ color: 0xff6b6b })
+        );
+        cube.position.set(-2, 0.5, 1);
+        scene.add(cube);
+
+        // ====== PORTAL SCENE (separate scene for splat) ======
+        const portalScene = new THREE.Scene();
+        portalScene.background = new THREE.Color(0x1a1a2a);
+        
+        const portalCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+        portalCamera.position.set(0, 1, 3);
+        portalCamera.lookAt(0, 0, 0);
+        
+        // Add lighting to portal scene
+        portalScene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const portalDirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        portalDirLight.position.set(5, 5, 5);
+        portalScene.add(portalDirLight);
+        
+        // Render target for portal - increased resolution for better quality
+        const portalRenderTarget = new THREE.WebGLRenderTarget(2048, 2048, {
+            minFilter: THREE.LinearFilter,
+            magFilter: THREE.LinearFilter,
+            format: THREE.RGBAFormat
+        });
+
+        // ====== GAUSSIAN SPLAT VIEWER ======
+        let splatViewer = null;
+
+        /**
+         * Load Gaussian Splat with proper configuration
+         * ✅ FIXED: Using correct settings from working project
+         */
+   /**
+ * Load Gaussian Splat with proper configuration
+ * ✅ FIXED: Removed splatViewer.start() call - not needed in manual mode
+ */
+async function loadGaussianSplat() {
+    if (USE_PLACEHOLDER) {
+        console.log('📋 Using placeholder mode');
+        const placeholder = createPlaceholderMesh();
+        portalScene.add(placeholder);
+        document.getElementById('file-name').textContent = 'Placeholder Mode';
+        document.getElementById('splat-info').textContent = 'Set USE_PLACEHOLDER=false';
+        return;
+    }
+
+    try {
+        console.log(`📄 Loading: ${SPLAT_FILE}`);
+        document.getElementById('loading-text').textContent = `Loading ${SPLAT_FILE}...`;
+
+        // ✅ CRITICAL FIX: Proper viewer configuration
+        splatViewer = new GaussianSplats3D.Viewer({
+            threeScene: portalScene,           // Use portal scene
+            renderer: renderer,                 // Share main renderer
+            camera: portalCamera,              // Use portal camera
+            selfDrivenMode: false,             // ✅ Manual control - we handle rendering
+            useBuiltInControls: false,         // No built-in controls
+            showLoadingSpinner: false,         // Hide built-in spinner
+            
+            // ✅ CRITICAL: These settings prevent SharedArrayBuffer errors
+            gpuAcceleratedSort: false,         // Disable GPU acceleration
+            integerBasedSort: false,           // Disable integer sorting  
+            sharedMemoryForWorkers: false,     // CRITICAL: Prevents SharedArrayBuffer error
+            
+            enableSplatSorting: true,          // Enable splat sorting
+            halfPrecisionCovariancesOnGPU: true,
+            dynamicScene: false,
+            webXRMode: GaussianSplats3D.WebXRMode.None,
+            renderMode: GaussianSplats3D.RenderMode.Always,
+            logLevel: GaussianSplats3D.LogLevel.Info  // See loading progress
+        });
+
+        console.log('✅ Viewer created with proper settings');
+        
+        // Initialize the viewer
+        await splatViewer.init();
+        console.log('✅ Viewer initialized');
+
+        // ✅ FIXED: Load splat scene with proper options
+        await splatViewer.addSplatScene(SPLAT_FILE, {
+            progressiveLoad: true,             // Load progressively for better UX
+            splatAlphaRemovalThreshold: 5,     // Remove transparent splats
+            position: [0, 0, 0],               // Center position
+            rotation: [1, 0, 0, 0],            // Identity rotation (quaternion)
+            scale: [5, 5, 5]                   // Scale up 5x
+        });
+
+        console.log('✅ Splat scene loaded successfully!');
+
+        // ✅ REMOVED: splatViewer.start() - not needed in selfDrivenMode: false
+        // We handle rendering manually in the animate loop
+
+        document.getElementById('file-name').textContent = SPLAT_FILE;
+        document.getElementById('splat-info').textContent = 'Rendering active ✓';
+
+    } catch (error) {
+        console.error('❌ Error loading splat:', error);
+        console.error('Stack:', error.stack);
+        
+        // Show fallback placeholder
+        const placeholder = createPlaceholderMesh();
+        portalScene.add(placeholder);
+        
+        document.getElementById('file-name').textContent = 'Load failed - check console';
+        document.getElementById('splat-info').textContent = error.message.substring(0, 40);
+    }
+}
+
+        /**
+         * Create placeholder mesh for testing
+         */
+        function createPlaceholderMesh() {
+            const geometry = new THREE.PlaneGeometry(3, 3);
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Create gradient background
+            const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+            gradient.addColorStop(0, '#4a9eff');
+            gradient.addColorStop(0.5, '#2a5eff');
+            gradient.addColorStop(1, '#1a3a8a');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Add "splats" effect
+            for (let i = 0; i < 50; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const radius = Math.random() * 30 + 10;
+                const alpha = Math.random() * 0.5 + 0.3;
+                
+                const splatGrad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                splatGrad.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+                splatGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                
+                ctx.fillStyle = splatGrad;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+            return new THREE.Mesh(geometry, material);
+        }
+
+        // ====== PORTAL GEOMETRY ======
+        const portalGroup = new THREE.Group();
+        portalGroup.position.set(0, 1.5, -3);
+
+        // Portal frame
+        const frame = new THREE.Mesh(
+            new THREE.BoxGeometry(2.2, 3.2, 0.1),
+            new THREE.MeshStandardMaterial({ 
+                color: 0x1a1a1a,
+                metalness: 0.8,
+                roughness: 0.2 
+            })
+        );
+        portalGroup.add(frame);
+
+        // Portal surface showing the render texture
+        const portalSurface = new THREE.Mesh(
+            new THREE.PlaneGeometry(2, 3),
+            new THREE.MeshBasicMaterial({ 
+                map: portalRenderTarget.texture,
+                side: THREE.DoubleSide
+            })
+        );
+        portalSurface.position.z = 0.06;
+        portalGroup.add(portalSurface);
+
+        // Portal glow effect
+        const glow = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.1, 3.1),
+            new THREE.MeshBasicMaterial({ 
+                color: 0x4a9eff,
+                transparent: true,
+                opacity: 0.2,
+                side: THREE.DoubleSide
+            })
+        );
+        glow.position.z = 0.05;
+        portalGroup.add(glow);
+
+        scene.add(portalGroup);
+
+        // ====== INITIALIZATION ======
+        async function init() {
+            await loadGaussianSplat();
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('instructions').style.display = 'block';
+            document.getElementById('file-info').style.display = 'block';
+            
+            animate();
+            console.log('🌀 Portal ready!');
+        }
+
+        // ====== ANIMATION LOOP ======
+// ====== ENHANCED NAVIGATION WITH PORTAL ENTRY ======
+let portalCameraAngle = 0;
+let isInSplatScene = false;  // Track if user is inside splat
+let splatControls = null;    // Controls for inside splat scene
+
+// Create separate controls for splat scene navigation
+function createSplatControls() {
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 0.5;      // Get very close
+    controls.maxDistance = 50;       // Explore far
+    controls.enabled = false;         // Start disabled
+    return controls;
+}
+
+splatControls = createSplatControls();
+
+// Raycaster for portal clicking
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// Handle portal click to enter/exit
+renderer.domElement.addEventListener('click', (event) => {
+    // Calculate mouse position
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
+    if (!isInSplatScene) {
+        // Check if clicking on portal
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(portalGroup.children, true);
+        
+        if (intersects.length > 0) {
+            enterSplatScene();
+        }
+    }
+});
+
+// Show prompt when near portal
+function updatePortalProximity() {
+    if (isInSplatScene) return;
+    
+    const distanceToPortal = camera.position.distanceTo(portalGroup.position);
+    const prompt = document.getElementById('portal-prompt');
+    
+    if (distanceToPortal < 5) {
+        prompt.classList.add('show');
+    } else {
+        prompt.classList.remove('show');
+    }
+}
+
+// Enter the splat scene
+function enterSplatScene() {
+    console.log('🚪 Entering splat scene...');
+    isInSplatScene = true;
+    
+    // Disable main controls
+    controls.enabled = false;
+    
+    // Enable splat controls
+    splatControls.enabled = true;
+    
+    // ✅ CRITICAL FIX: Switch the splat viewer to use the main camera
+    if (splatViewer) {
+        // Update the viewer's camera reference
+        splatViewer.camera = camera;
+        
+        // Remove splat from portal scene
+        if (splatViewer.splatMesh) {
+            portalScene.remove(splatViewer.splatMesh);
+        }
+        
+        // Add splat to main scene
+        if (splatViewer.splatMesh) {
+            scene.add(splatViewer.splatMesh);
+        }
+    }
+    
+    // Position camera inside the splat scene
+    camera.position.set(0, 2, 8);
+    camera.lookAt(0, 0, 0);
+    splatControls.target.set(0, 0, 0);
+    splatControls.update();
+    
+    // Change background for immersion
+    scene.background = new THREE.Color(0x1a1a2a);
+    
+    // Hide main scene objects
+    floor.visible = false;
+    backWall.visible = false;
+    cube.visible = false;
+    portalGroup.visible = false;
+    
+    // Update instructions
+    document.getElementById('instructions').innerHTML = `
+        <h2>🌀 Inside Splat Scene</h2>
+        <ul>
+            <li>Drag to rotate view</li>
+            <li>Scroll to zoom in/out</li>
+            <li>Explore the 3D space!</li>
+            <li>Press ESC to exit</li>
+        </ul>
+    `;
+    
+    document.getElementById('portal-prompt').classList.remove('show');
+    
+    console.log('✅ Camera switched to main camera for splat navigation');
+}
+
+// Exit the splat scene
+function exitSplatScene() {
+    console.log('🚪 Exiting splat scene...');
+    isInSplatScene = false;
+    
+    // Re-enable main controls
+    controls.enabled = true;
+    splatControls.enabled = false;
+    
+    // ✅ CRITICAL FIX: Switch splat viewer back to portal camera
+    if (splatViewer) {
+        // Update the viewer's camera reference back to portal camera
+        splatViewer.camera = portalCamera;
+        
+        // Remove splat from main scene
+        if (splatViewer.splatMesh) {
+            scene.remove(splatViewer.splatMesh);
+        }
+        
+        // Add splat back to portal scene
+        if (splatViewer.splatMesh) {
+            portalScene.add(splatViewer.splatMesh);
+        }
+    }
+    
+    // Reset camera to main scene
+    camera.position.set(0, 1.6, 5);
+    controls.target.set(0, 1.6, -3);
+    controls.update();
+    
+    // Restore background
+    scene.background = new THREE.Color(0x0a0a0a);
+    
+    // Show main scene objects
+    floor.visible = true;
+    backWall.visible = true;
+    cube.visible = true;
+    portalGroup.visible = true;
+    
+    // Restore instructions
+    document.getElementById('instructions').innerHTML = `
+        <h2>🌀 Portal Controls</h2>
+        <ul>
+            <li>Left click + drag to orbit</li>
+            <li>Scroll to zoom in/out</li>
+            <li>Navigate closer to portal</li>
+            <li>Click portal to enter!</li>
+        </ul>
+    `;
+    
+    console.log('✅ Camera switched back to portal camera');
+}
+
+// Listen for ESC key to exit
+window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isInSplatScene) {
+        exitSplatScene();
+    }
+});
+
+function animate() {
+    requestAnimationFrame(animate);
+    
+    // Update appropriate controls
+    if (isInSplatScene) {
+        splatControls.update();
+    } else {
+        controls.update();
+        updatePortalProximity();
+        
+        // Animate cube in main scene
+        cube.rotation.x += 0.005;
+        cube.rotation.y += 0.005;
+        
+        // Rotate portal camera (only when outside)
+        portalCameraAngle += 0.002;
+        portalCamera.position.x = Math.sin(portalCameraAngle) * 8;
+        portalCamera.position.y = 2;
+        portalCamera.position.z = Math.cos(portalCameraAngle) * 8;
+        portalCamera.lookAt(0, 0, 0);
+    }
+    
+    // ✅ FIXED: Proper rendering logic for both modes
+    if (splatViewer) {
+        // Always update the viewer
+        splatViewer.update();
+        
+        if (isInSplatScene) {
+            // ✅ When INSIDE: Render splat directly to screen with main camera
+            renderer.setRenderTarget(null);
+            splatViewer.render();
+            
+        } else {
+            // ✅ When OUTSIDE: Render splat to portal texture with portal camera
+            renderer.setRenderTarget(portalRenderTarget);
+            splatViewer.render();
+            renderer.setRenderTarget(null);
+            
+            // Then render main scene with portal
+            renderer.render(scene, camera);
+        }
+    } else {
+        // Fallback if splat viewer not loaded
+        if (!isInSplatScene) {
+            renderer.setRenderTarget(portalRenderTarget);
+            renderer.render(portalScene, portalCamera);
+            renderer.setRenderTarget(null);
+            renderer.render(scene, camera);
+        } else {
+            renderer.render(scene, camera);
+        }
+    }
+}
+
+        // ====== WINDOW RESIZE HANDLER ======
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            // Update portal render target size
+            portalRenderTarget.setSize(
+                Math.min(window.innerWidth, 2048),
+                Math.min(window.innerHeight, 2048)
+            );
+        });
+
+        // ====== START APPLICATION ======
+        init().catch(err => {
+            console.error('Init failed:', err);
+            document.getElementById('loading-text').textContent = 'Error: ' + err.message;
+        });
+    </script>
+</body>
+</html>
