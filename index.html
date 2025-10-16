@@ -173,9 +173,9 @@
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
-// ✨ ENABLE SHADOWS ✨
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;  // Soft shadows
+        // ✨ ENABLE SHADOWS ✨
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;  // Soft shadows
 
 
         document.getElementById('canvas-container').appendChild(renderer.domElement);
@@ -189,69 +189,98 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;  // Soft shadows
         controls.target.set(0, 1.6, -3);
 
         // ====== LIGHTING ======
-        scene.add(new THREE.AmbientLight(0xffffff, 0.3));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(5, 5, 5);
-        scene.add(dirLight);
-        const pointLight = new THREE.PointLight(0x4a9eff, 0.5);
-        pointLight.position.set(-3, 2, 0);
-        scene.add(pointLight);
+     // ====== DRAMATIC LIGHTING ======
+// Very dark ambient light so spotlights stand out
+scene.add(new THREE.AmbientLight(0x111111, 0.2));  // Much darker!
 
-        // ====== DRAMATIC LIGHTING WITH MULTIPLE SPOTLIGHTS ======
+// Remove or reduce directional light
+// const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+// dirLight.position.set(5, 5, 5);
+// scene.add(dirLight);
 
-// Main spotlight on portal (blue)
-const spotlight1 = new THREE.SpotLight(0x4a9eff, 2);
-spotlight1.position.set(0, 6, 2);
-spotlight1.angle = Math.PI / 6;
-spotlight1.penumbra = 0.3;
-spotlight1.decay = 2;
-spotlight1.distance = 15;
+// Remove point light (spotlights will provide all light)
+// const pointLight = new THREE.PointLight(0x4a9eff, 0.5);
+// pointLight.position.set(-3, 2, 0);
+// scene.add(pointLight);
+
+// Main spotlight on portal (bright blue beam)
+const spotlight1 = new THREE.SpotLight(0x4a9eff, 10);  // Increased intensity from 2 to 10
+spotlight1.position.set(0, 8, 2);                      // Higher up
+spotlight1.angle = Math.PI / 5;                        // Wider cone
+spotlight1.penumbra = 0.6;                             // Softer edges
+spotlight1.decay = 1.5;                                // Less falloff
+spotlight1.distance = 20;                              // Longer reach
+spotlight1.castShadow = true;
 spotlight1.target.position.set(0, 1.5, -3);
 scene.add(spotlight1);
 scene.add(spotlight1.target);
 
-// Accent spotlight on cube (red/orange)
-const spotlight2 = new THREE.SpotLight(0xff6b6b, 1.5);
-spotlight2.position.set(-4, 5, 3);
-spotlight2.angle = Math.PI / 8;
-spotlight2.penumbra = 0.4;
-spotlight2.decay = 2;
-spotlight2.distance = 10;
-spotlight2.target.position.set(-2, 0.5, 1);  // Cube position
+// Shadow settings for spotlight1
+spotlight1.shadow.mapSize.width = 2048;
+spotlight1.shadow.mapSize.height = 2048;
+spotlight1.shadow.camera.near = 1;
+spotlight1.shadow.camera.far = 20;
+
+// Accent spotlight on cube (dramatic red)
+const spotlight2 = new THREE.SpotLight(0xff3333, 5);   // Brighter red
+spotlight2.position.set(-4, 6, 3);                     // Higher
+spotlight2.angle = Math.PI / 7;
+spotlight2.penumbra = 0.5;
+spotlight2.decay = 1.5;
+spotlight2.distance = 12;
+spotlight2.castShadow = true;
+spotlight2.target.position.set(-2, 0.5, 1);
 scene.add(spotlight2);
 scene.add(spotlight2.target);
 
-// Rim light from behind (white)
-const spotlight3 = new THREE.SpotLight(0xffffff, 1);
-spotlight3.position.set(0, 4, -8);
-spotlight3.angle = Math.PI / 4;
-spotlight3.penumbra = 0.5;
-spotlight3.decay = 2;
-spotlight3.distance = 12;
+// Rim light from behind (cool white/blue)
+const spotlight3 = new THREE.SpotLight(0xaaccff, 3);   // Cool white
+spotlight3.position.set(0, 5, -8);
+spotlight3.angle = Math.PI / 3;
+spotlight3.penumbra = 0.7;
+spotlight3.decay = 1.5;
+spotlight3.distance = 15;
 spotlight3.target.position.set(0, 1, -3);
 scene.add(spotlight3);
 scene.add(spotlight3.target);
 
-        // ====== ROOM GEOMETRY ======
-        const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(20, 20),
-            new THREE.MeshStandardMaterial({ color: 0x2a2a2a })
-        );
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.y = -1;
-        scene.add(floor);
+// Add visible helpers to see the spotlights (remove these later if you want)
+const helper1 = new THREE.SpotLightHelper(spotlight1, 0x4a9eff);
+const helper2 = new THREE.SpotLightHelper(spotlight2, 0xFF0000);
+const helper3 = new THREE.SpotLightHelper(spotlight3, 0xaaccff);
+//scene.add(helper1);
+//scene.add(helper2);
+//scene.add(helper3);
 
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, side: THREE.DoubleSide });
-        const backWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 8), wallMat);
-        backWall.position.set(0, 3, -5);
-        scene.add(backWall);
+console.log('✨ Spotlights added - check scene!');
 
-        const cube = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 0.8, 0.8),
-            new THREE.MeshStandardMaterial({ color: 0xff6b6b })
-        );
-        cube.position.set(-2, 0.5, 1);
-        scene.add(cube);
+  // ====== ROOM GEOMETRY ======
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshStandardMaterial({ color: 0x1fffff })  // Darker floor
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -1;
+floor.receiveShadow = true;  // ✅ Receive shadows
+scene.add(floor);
+
+const wallMat = new THREE.MeshStandardMaterial({ 
+    color: 0xffffff,  // Darker wall
+    side: THREE.DoubleSide 
+});
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 8), wallMat);
+backWall.position.set(0, 3, -5);
+backWall.receiveShadow = true;  // ✅ Receive shadows
+scene.add(backWall);
+
+const cube = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.8, 0.8),
+    new THREE.MeshStandardMaterial({ color: 0xFFFF00 })
+);
+cube.position.set(-2, 0.5, 1);
+cube.castShadow = true;     // ✅ Cast shadows
+cube.receiveShadow = true;  // ✅ Receive shadows
+scene.add(cube);
 
         // ====== PORTAL SCENE (separate scene for splat) ======
         const portalScene = new THREE.Scene();
