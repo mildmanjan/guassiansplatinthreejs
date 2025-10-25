@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gaussian Splat Portal Gallery</title>
+    <title>Gaussian Splat Development Log</title>
     <style>
         * {
             margin: 0;
@@ -150,7 +150,7 @@
     </div>
     
     <div id="gallery-info" style="display: none;">
-        <h2>📊 Portal Methods</h2>
+        <h2>📊 Portal Description</h2>
         <div style="font-size: 12px; line-height: 1.8;">
             <div style="color: #4a9eff;">● Portal 1: first test guass</div>
             <div style="color: #ff6b6b;">● Portal 2: using SuperPoint SuperGlue method</div>
@@ -645,7 +645,7 @@
 
         // ====== INITIALIZATION ======
         async function init() {
-            document.getElementById('loading-text').textContent = 'Creating portal gallery...';
+            document.getElementById('loading-text').textContent = 'two secs, just creating portal gallery...';
 
             for (let i = 0; i < PORTAL_CONFIGS.length; i++) {
                 document.getElementById('loading-text').textContent = `Loading portal ${i + 1}/${PORTAL_CONFIGS.length}...`;
@@ -659,7 +659,7 @@
             document.getElementById('file-info').style.display = 'block';
 
             animate();
-            console.log('🌀 Portal gallery ready!');
+            console.log('Ta daa! Portal gallery ready!');
         }
 
         // ====== WINDOW RESIZE ======
