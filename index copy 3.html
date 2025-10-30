@@ -129,22 +129,6 @@
             font-size: 18px;
             color: #4a9eff;
         }
-        #hotspot-info {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            color: white;
-            background: rgba(255, 102, 0, 0.9);
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 14px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            z-index: 100;
-        }
-        #hotspot-info.show {
-            opacity: 1;
-        }
     </style>
 </head>
 <body>
@@ -169,7 +153,7 @@
         <h2>📊 Portal Description</h2>
         <div style="font-size: 12px; line-height: 1.8;">
             <div style="color: #4a9eff;">● Portal 1: first test guass</div>
-            <div style="color: #ff6b6b;">● Portal 2: using SuperPoint SuperGlue method and smaller photoset Oct29th (🎯 Interactive Hotspots)</div>
+            <div style="color: #ff6b6b;">● Portal 2: using SuperPoint SuperGlue method and smaller photoset Oct29th</div>
             <div style="color: #51cf66;">● Portal 3: Reference(0.1)</div>
         </div>
     </div>
@@ -181,10 +165,6 @@
 
     <div id="portal-prompt">
         Click portal to enter the 3D scene!
-    </div>
-
-    <div id="hotspot-info">
-        🎯 Click glowing spheres! (Cyan=info.mp3, Orange=bass.mp3) Click again to stop!
     </div>
 
     <script type="importmap">
@@ -208,7 +188,7 @@
                 name: "First Guassian Test iPhone and Record3D",
                 splatFile: "https://huggingface.co/mysterytreebeast/gaussian-splat-models/resolve/main/frontroom_1506.ply",
                 //splatFile: "scan2.ply",
-                position: { x: -5, y: 0.5, z: -5 }, // Lowered from 1.5 to 0.5
+                position: { x: -5, y: 1.5, z: -5 },
                 color: 0x4a9eff,
                 parallaxStrength: 0.5,
                 scale: 5
@@ -217,7 +197,7 @@
                 name: "using SuperPoint/SuperGlue technique.Smaller photoset 107 pics, faster, better results",
                 splatFile: "https://huggingface.co/mysterytreebeast/gaussian-splat-models/resolve/main/frontroomSuperGlue2.ply",
                 //splatFile:"frontroomSplat211025.ply",
-                position: { x: 0, y: 0.5, z: -6 }, // Lowered from 1.5 to 0.5
+                position: { x: 0, y: 1.5, z: -6 },
                 color: 0xff6b6b,
                 parallaxStrength: 0.3,
                 scale: 5
@@ -225,7 +205,7 @@
             {
                 name: "reference)",
                 splatFile: "https://huggingface.co/mysterytreebeast/gaussian-splat-models/resolve/main/InteriorDesign.ply",
-                position: { x: 5, y: 0.5, z: -5 }, // Lowered from 1.5 to 0.5
+                position: { x: 5, y: 1.5, z: -5 },
                 color: 0x51cf66,
                 parallaxStrength: 0.1,
                 scale: 5
@@ -253,7 +233,7 @@
         controls.minDistance = 3;
         controls.maxDistance = 20;
         controls.maxPolarAngle = Math.PI / 2;
-        controls.target.set(0, 0.8, -3); // Lowered from 1.6 to 0.8 to match portal height
+        controls.target.set(0, 1.6, -3);
 
         // ====== DRAMATIC LIGHTING (from working code) ======
         scene.add(new THREE.AmbientLight(0x111111, 0.2));
@@ -265,7 +245,7 @@
         spotlight1.decay = 1.5;
         spotlight1.distance = 20;
         spotlight1.castShadow = true;
-        spotlight1.target.position.set(-5, 0.5, -5); // Updated to match new portal height
+        spotlight1.target.position.set(-5, 1.5, -5);
         scene.add(spotlight1);
         scene.add(spotlight1.target);
 
@@ -276,7 +256,7 @@
         spotlight2.decay = 1.5;
         spotlight2.distance = 20;
         spotlight2.castShadow = true;
-        spotlight2.target.position.set(0, 0.5, -6); // Updated to match new portal height
+        spotlight2.target.position.set(0, 1.5, -6);
         scene.add(spotlight2);
         scene.add(spotlight2.target);
 
@@ -287,7 +267,7 @@
         spotlight3.decay = 1.5;
         spotlight3.distance = 20;
         spotlight3.castShadow = true;
-        spotlight3.target.position.set(5, 0.5, -5); // Updated to match new portal height
+        spotlight3.target.position.set(5, 1.5, -5);
         scene.add(spotlight3);
         scene.add(spotlight3.target);
 
@@ -337,345 +317,6 @@
         let isInSplatScene = false;
         let splatControls = null;
 
-        // ====== HOTSPOT SYSTEM ======
-        const hotspots = [];
-        let audioContext = null;
-        
-        // Audio tracking system for stop/play functionality
-        let currentlyPlayingAudio = [null, null]; // Track audio sources for each hotspot
-        let currentlyPlayingType = [null, null];  // Track type: 'file', 'synthetic', or null
-        
-        // Audio files - Replace these paths with your own audio files
-        // For now, we'll use synthetic audio generation which always works
-        // 
-        // TO USE YOUR OWN AUDIO FILES:
-        // 1. Place your audio files in the same folder as this HTML file
-        // 2. Replace 'null' with your file paths like this:
-        //    'your-audio-1.mp3', 'your-audio-2.wav'
-        // 3. Supported formats: .mp3, .wav, .ogg, .m4a
-        //
-        const AUDIO_FILES = [
-            'info.mp3',  // Cyan hotspot (right side, higher position) will play info.mp3
-            'bass.mp3'   // Orange hotspot (left side, forward/closer) will play bass.mp3
-        ];
-
-        // HOTSPOT MAPPING:
-        // Index 0 (Cyan sphere): info.mp3  - Position: (2, 1.5, 3) - Right side
-        // Index 1 (Orange sphere): bass.mp3 - Position: (-1, 1, 6) - Left side, closer
-
-        // Create synthetic audio tones (always works, no network needed)
-        function createSyntheticAudio(audioIndex) {
-            if (!audioContext) return null;
-            
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            // Different tones for different hotspots
-            const frequencies = [800, 400]; // Cyan = higher pitch, Orange = lower pitch
-            const frequency = frequencies[audioIndex] || 440;
-            
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            oscillator.type = 'sine';
-            
-            // Create a nice envelope
-            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.8);
-            
-            return oscillator; // Return the oscillator so it can be tracked
-        }
-
-        // Initialize audio context (required for modern browsers)
-        function initAudioContext() {
-            if (!audioContext) {
-                try {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                } catch (e) {
-                    console.warn('AudioContext not supported, falling back to HTML5 Audio');
-                }
-            }
-        }
-
-        // Play audio from URL or generate synthetic audio with stop/play toggle
-        async function playAudio(audioIndex) {
-            console.log(`🔊 Audio control for hotspot ${audioIndex + 1}`);
-            
-            // Check if audio is currently playing for this hotspot
-            if (currentlyPlayingAudio[audioIndex]) {
-                // Stop currently playing audio
-                stopAudio(audioIndex);
-                return;
-            }
-            
-            try {
-                initAudioContext();
-                
-                // Resume audio context if suspended (browser autoplay policy)
-                if (audioContext && audioContext.state === 'suspended') {
-                    await audioContext.resume();
-                }
-
-                const audioUrl = AUDIO_FILES[audioIndex];
-                
-                if (audioUrl) {
-                    // Try to load external audio file
-                    try {
-                        const response = await fetch(audioUrl);
-                        const arrayBuffer = await response.arrayBuffer();
-                        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-                        
-                        const source = audioContext.createBufferSource();
-                        source.buffer = audioBuffer;
-                        source.connect(audioContext.destination);
-                        
-                        // Track this audio source
-                        currentlyPlayingAudio[audioIndex] = source;
-                        currentlyPlayingType[audioIndex] = 'file';
-                        
-                        // Clean up when audio ends naturally
-                        source.onended = () => {
-                            currentlyPlayingAudio[audioIndex] = null;
-                            currentlyPlayingType[audioIndex] = null;
-                        };
-                        
-                        source.start();
-                        console.log('✅ External audio file playing');
-                        
-                        // Show visual feedback
-                        showAudioFeedback(audioIndex, 'file');
-                        return;
-                    } catch (fetchError) {
-                        console.warn('External audio failed, using synthetic audio:', fetchError);
-                    }
-                }
-                
-                // Use synthetic audio (always works)
-                if (audioContext) {
-                    const oscillator = createSyntheticAudio(audioIndex);
-                    if (oscillator) {
-                        // Track this audio source
-                        currentlyPlayingAudio[audioIndex] = oscillator;
-                        currentlyPlayingType[audioIndex] = 'synthetic';
-                        
-                        // Clean up when audio ends naturally
-                        oscillator.onended = () => {
-                            currentlyPlayingAudio[audioIndex] = null;
-                            currentlyPlayingType[audioIndex] = null;
-                        };
-                        
-                        console.log('✅ Synthetic audio playing');
-                        
-                        // Show visual feedback
-                        showAudioFeedback(audioIndex, 'synthetic');
-                    }
-                } else {
-                    throw new Error('No AudioContext available');
-                }
-                
-            } catch (error) {
-                console.error('All audio methods failed:', error);
-                // Show visual feedback as last resort
-                showAudioFeedback(audioIndex, 'visual');
-            }
-        }
-
-        // Stop audio for a specific hotspot
-        function stopAudio(audioIndex) {
-            const audioSource = currentlyPlayingAudio[audioIndex];
-            const audioType = currentlyPlayingType[audioIndex];
-            
-            if (audioSource) {
-                try {
-                    if (audioType === 'file' || audioType === 'synthetic') {
-                        audioSource.stop();
-                    }
-                    console.log(`🛑 Stopped audio for hotspot ${audioIndex + 1}`);
-                } catch (e) {
-                    console.warn('Error stopping audio:', e);
-                }
-                
-                // Clear tracking
-                currentlyPlayingAudio[audioIndex] = null;
-                currentlyPlayingType[audioIndex] = null;
-                
-                // Show stop feedback
-                showStopFeedback(audioIndex);
-            }
-        }
-
-        // Show visual feedback when audio plays or fails
-        function showAudioFeedback(audioIndex, audioType = 'visual') {
-            const feedback = document.createElement('div');
-            feedback.style.cssText = `
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: rgba(74, 158, 255, 0.95);
-                color: white;
-                padding: 20px 30px;
-                border-radius: 10px;
-                z-index: 1000;
-                font-size: 16px;
-                text-align: center;
-                border: 2px solid rgba(255, 255, 255, 0.3);
-            `;
-            
-            let message = '';
-            if (audioType === 'file') {
-                const fileName = audioIndex === 0 ? 'info.mp3' : 'bass.mp3';
-                const hotspotColor = audioIndex === 0 ? 'Cyan' : 'Orange';
-                message = `🎵 ${hotspotColor} Hotspot\n▶️ Playing: ${fileName}\n\n(Click again to stop)`;
-            } else if (audioType === 'synthetic') {
-                const hotspotName = audioIndex === 0 ? 'Cyan Hotspot' : 'Orange Hotspot';
-                const pitch = audioIndex === 0 ? 'High Tone' : 'Low Tone';
-                message = `🔊 ${hotspotName}\n▶️ ${pitch} Playing!\n\n(Click again to stop)`;
-            } else {
-                const fileName = audioIndex === 0 ? 'info.mp3' : 'bass.mp3';
-                const hotspotColor = audioIndex === 0 ? 'Cyan' : 'Orange';
-                message = `🎯 ${hotspotColor} Hotspot\n${fileName} would play here`;
-            }
-            
-            feedback.textContent = message;
-            feedback.style.whiteSpace = 'pre-line'; // Allow line breaks
-            document.body.appendChild(feedback);
-            
-            setTimeout(() => {
-                if (document.body.contains(feedback)) {
-                    document.body.removeChild(feedback);
-                }
-            }, 2000);
-        }
-
-        // Show visual feedback when audio is stopped
-        function showStopFeedback(audioIndex) {
-            const feedback = document.createElement('div');
-            feedback.style.cssText = `
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: rgba(255, 102, 0, 0.95);
-                color: white;
-                padding: 20px 30px;
-                border-radius: 10px;
-                z-index: 1000;
-                font-size: 16px;
-                text-align: center;
-                border: 2px solid rgba(255, 255, 255, 0.3);
-            `;
-            
-            const fileName = audioIndex === 0 ? 'info.mp3' : 'bass.mp3';
-            const hotspotColor = audioIndex === 0 ? 'Cyan' : 'Orange';
-            const message = `🛑 ${hotspotColor} Hotspot\n⏹️ Stopped: ${fileName}\n\n(Click again to play)`;
-            
-            feedback.textContent = message;
-            feedback.style.whiteSpace = 'pre-line';
-            document.body.appendChild(feedback);
-            
-            setTimeout(() => {
-                if (document.body.contains(feedback)) {
-                    document.body.removeChild(feedback);
-                }
-            }, 1500);
-        }
-
-        // Create hotspot objects
-        function createHotspots() {
-            console.log('🎯 Creating hotspots...');
-            
-            // Hotspot 1 - SMALLER cyan sphere, lower and to the right
-            const hotspot1Geometry = new THREE.SphereGeometry(0.4, 16, 16); // Reduced from 0.8 to 0.4
-            const hotspot1Material = new THREE.MeshBasicMaterial({ 
-                color: 0x00ffff,
-                transparent: true,
-                opacity: 1.0, // Full opacity to ensure visibility
-                emissive: 0x003333 // Add emissive glow
-            });
-            const hotspot1 = new THREE.Mesh(hotspot1Geometry, hotspot1Material);
-            hotspot1.position.set(2, 1.5, 3); // Moved right (0→2), lower (3→1.5), kept z at 3
-            hotspot1.userData = { 
-                isHotspot: true, 
-                audioIndex: 0,
-                name: 'Audio Point 1'
-            };
-            
-            // Add pulsing glow effect - smaller
-            const hotspot1Glow = new THREE.Mesh(
-                new THREE.SphereGeometry(0.6, 16, 16), // Reduced from 1.2 to 0.6
-                new THREE.MeshBasicMaterial({ 
-                    color: 0x00ffff,
-                    transparent: true,
-                    opacity: 0.5, // Higher opacity for visibility
-                    emissive: 0x001111
-                })
-            );
-            hotspot1Glow.position.copy(hotspot1.position);
-            
-            // Hotspot 2 - SMALLER orange sphere, forward and down
-            const hotspot2Geometry = new THREE.SphereGeometry(0.4, 16, 16); // Reduced from 0.8 to 0.4
-            const hotspot2Material = new THREE.MeshBasicMaterial({ 
-                color: 0xff6600,
-                transparent: true,
-                opacity: 1.0, // Full opacity to ensure visibility
-                emissive: 0x331100 // Add emissive glow
-            });
-            const hotspot2 = new THREE.Mesh(hotspot2Geometry, hotspot2Material);
-            hotspot2.position.set(-4, 1, 5); // Forward (3→6), down (2→1), slightly less left (-3→-1)
-            hotspot2.userData = { 
-                isHotspot: true, 
-                audioIndex: 1,
-                name: 'Audio Point 2'
-            };
-            
-            // Add pulsing glow effect - smaller
-            const hotspot2Glow = new THREE.Mesh(
-                new THREE.SphereGeometry(0.6, 16, 16), // Reduced from 1.2 to 0.6
-                new THREE.MeshBasicMaterial({ 
-                    color: 0xff6600,
-                    transparent: true,
-                    opacity: 0.5, // Higher opacity for visibility
-                    emissive: 0x110000
-                })
-            );
-            hotspot2Glow.position.copy(hotspot2.position);
-
-            // Add to scene but make invisible initially
-            scene.add(hotspot1);
-            scene.add(hotspot1Glow);
-            scene.add(hotspot2);
-            scene.add(hotspot2Glow);
-            
-            hotspot1.visible = false;
-            hotspot1Glow.visible = false;
-            hotspot2.visible = false;
-            hotspot2Glow.visible = false;
-
-            hotspots.push({
-                sphere: hotspot1,
-                glow: hotspot1Glow,
-                audioIndex: 0,
-                name: 'Audio Point 1'
-            });
-            
-            hotspots.push({
-                sphere: hotspot2,
-                glow: hotspot2Glow,
-                audioIndex: 1,
-                name: 'Audio Point 2'
-            });
-
-            console.log('✅ Hotspots created with enhanced visibility');
-            console.log(`   Cyan hotspot at: (${hotspot1.position.x}, ${hotspot1.position.y}, ${hotspot1.position.z})`);
-            console.log(`   Orange hotspot at: (${hotspot2.position.x}, ${hotspot2.position.y}, ${hotspot2.position.z})`);
-        }
-
         function createSplatControls() {
             const controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
@@ -721,7 +362,7 @@
             portalGroup.position.set(config.position.x, config.position.y, config.position.z);
 
             const frame = new THREE.Mesh(
-                new THREE.BoxGeometry(1.5, 2.2, 0.1), // Reduced from 2.2, 3.2
+                new THREE.BoxGeometry(2.2, 3.2, 0.1),
                 new THREE.MeshStandardMaterial({ 
                     color: 0x1a1a1a,
                     metalness: 0.8,
@@ -733,7 +374,7 @@
             portalGroup.add(frame);
 
             const portalSurface = new THREE.Mesh(
-                new THREE.PlaneGeometry(1.3, 2), // Reduced from 2, 3
+                new THREE.PlaneGeometry(2, 3),
                 new THREE.MeshBasicMaterial({ 
                     map: portalRenderTarget.texture,
                     side: THREE.DoubleSide
@@ -743,7 +384,7 @@
             portalGroup.add(portalSurface);
 
             const glow = new THREE.Mesh(
-                new THREE.PlaneGeometry(1.4, 2.1), // Reduced from 2.1, 3.1
+                new THREE.PlaneGeometry(2.1, 3.1),
                 new THREE.MeshBasicMaterial({ 
                     color: config.color,
                     transparent: true,
@@ -829,43 +470,19 @@
         const mouse = new THREE.Vector2();
 
         renderer.domElement.addEventListener('click', (event) => {
+            if (isInSplatScene) return;
+
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
 
-            if (isInSplatScene) {
-                // Check for hotspot clicks only in the middle portal (index 1)
-                if (activePortalIndex === 1) {
-                    const hotspotObjects = [];
-                    hotspots.forEach(hotspot => {
-                        if (hotspot.sphere.visible) {
-                            hotspotObjects.push(hotspot.sphere);
-                        }
-                    });
-
-                    const intersects = raycaster.intersectObjects(hotspotObjects);
-                    if (intersects.length > 0) {
-                        const clickedHotspot = intersects[0].object;
-                        const audioIndex = clickedHotspot.userData.audioIndex;
-                        console.log(`🎯 Hotspot clicked: ${clickedHotspot.userData.name}`);
-                        
-                        // Initialize audio context on first user interaction
-                        initAudioContext();
-                        playAudio(audioIndex);
-                        
-                        return; // Don't process other clicks
-                    }
+            portals.forEach((portal) => {
+                const intersects = raycaster.intersectObjects(portal.group.children, true);
+                if (intersects.length > 0) {
+                    enterPortal(portal.index);
                 }
-            } else {
-                // Portal clicking logic
-                portals.forEach((portal) => {
-                    const intersects = raycaster.intersectObjects(portal.group.children, true);
-                    if (intersects.length > 0) {
-                        enterPortal(portal.index);
-                    }
-                });
-            }
+            });
         });
 
         function updatePortalProximity() {
@@ -885,7 +502,7 @@
             }
         }
 
-        function enterPortal(portalIndex) {
+  function enterPortal(portalIndex) {
             console.log(`🚪 Entering portal ${portalIndex}`);
             isInSplatScene = true;
             activePortalIndex = portalIndex;
@@ -917,58 +534,16 @@
             spotlight2.visible = false;
             spotlight3.visible = false;
 
-            // Show hotspots only in the middle portal (index 1)
-            if (portalIndex === 1) {
-                console.log('🎯 Showing hotspots for middle portal');
-                hotspots.forEach((hotspot, index) => {
-                    hotspot.sphere.visible = true;
-                    hotspot.glow.visible = true;
-                    
-                    // CRITICAL FIX: Add hotspots to the portal scene so they render with the splat
-                    if (activePortal && activePortal.scene) {
-                        activePortal.scene.add(hotspot.sphere);
-                        activePortal.scene.add(hotspot.glow);
-                    }
-                    
-                    console.log(`   Hotspot ${index + 1} made visible at:`, hotspot.sphere.position);
-                    console.log(`   Hotspot ${index + 1} opacity:`, hotspot.sphere.material.opacity);
-                });
-                document.getElementById('hotspot-info').classList.add('show');
-                console.log('✅ Hotspots should now be visible!');
-            } else {
-                console.log('⚪ Not middle portal, hiding hotspots');
-                hotspots.forEach(hotspot => {
-                    hotspot.sphere.visible = false;
-                    hotspot.glow.visible = false;
-                    
-                    // Remove from any portal scene
-                    if (hotspot.sphere.parent && hotspot.sphere.parent !== scene) {
-                        hotspot.sphere.parent.remove(hotspot.sphere);
-                    }
-                    if (hotspot.glow.parent && hotspot.glow.parent !== scene) {
-                        hotspot.glow.parent.remove(hotspot.glow);
-                    }
-                });
-                document.getElementById('hotspot-info').classList.remove('show');
-            }
-
-            let instructionText = `
+            document.getElementById('instructions').innerHTML = `
                 <h2>🌀 Inside ${portals[portalIndex].config.name}</h2>
                 <ul>
                     <li>Drag to rotate view</li>
                     <li>Scroll to zoom in/out</li>
-                    <li>Explore the 3D space</li>`;
-            
-            if (portalIndex === 1) {
-                instructionText += `<li>🎯 Look for glowing spheres to click!</li>`;
-                instructionText += `<li>🔊 Click to play/stop audio</li>`;
-            }
-            
-            instructionText += `<li>Press ESC to exit</li>
+                    <li>Explore the 3D space, mind your head on the floaters ;)</li>
+                    <li>Press ESC to exit</li>
                 </ul>
             `;
 
-            document.getElementById('instructions').innerHTML = instructionText;
             document.getElementById('portal-prompt').classList.remove('show');
         }
 
@@ -982,33 +557,6 @@
                 console.log('✅ Restored portal camera');
             }
 
-            // Clean up hotspots from portal scene
-            if (activePortalIndex === 1 && activePortal && activePortal.scene) {
-                // Stop any playing audio when exiting
-                for (let i = 0; i < currentlyPlayingAudio.length; i++) {
-                    if (currentlyPlayingAudio[i]) {
-                        try {
-                            currentlyPlayingAudio[i].stop();
-                        } catch (e) {
-                            console.warn('Error stopping audio on exit:', e);
-                        }
-                        currentlyPlayingAudio[i] = null;
-                        currentlyPlayingType[i] = null;
-                    }
-                }
-                
-                hotspots.forEach(hotspot => {
-                    activePortal.scene.remove(hotspot.sphere);
-                    activePortal.scene.remove(hotspot.glow);
-                    // Add back to main scene but keep invisible
-                    scene.add(hotspot.sphere);
-                    scene.add(hotspot.glow);
-                    hotspot.sphere.visible = false;
-                    hotspot.glow.visible = false;
-                });
-                console.log('🎯 Hotspots and audio cleaned up from portal scene');
-            }
-
             isInSplatScene = false;
             activePortalIndex = -1;
 
@@ -1016,7 +564,7 @@
             splatControls.enabled = false;
 
             camera.position.set(0, 1.6, 8);
-            controls.target.set(0, 0.8, -3); // Updated to match new lower portal height
+            controls.target.set(0, 1.6, -3);
             controls.update();
 
             scene.background = new THREE.Color(0x0a0a0a);
@@ -1030,8 +578,6 @@
             spotlight1.visible = true;
             spotlight2.visible = true;
             spotlight3.visible = true;
-
-            document.getElementById('hotspot-info').classList.remove('show');
 
             document.getElementById('instructions').innerHTML = `
                 <h2>🌀 Gallery Controls</h2>
@@ -1051,6 +597,7 @@
         });
 
         // ====== ANIMATION LOOP ======
+  // ====== ANIMATION LOOP ======
         function animate() {
             requestAnimationFrame(animate);
 
@@ -1065,23 +612,6 @@
                     // ✅ CRITICAL: Must call viewer.render() for splat to show
                     renderer.setRenderTarget(null);
                     activePortal.viewer.render();  // This renders the splat!
-                }
-
-                // Animate hotspots if visible
-                if (activePortalIndex === 1) {
-                    const time = Date.now() * 0.002;
-                    hotspots.forEach((hotspot, index) => {
-                        if (hotspot.sphere.visible && hotspot.sphere.parent === activePortal.scene) {
-                            // Pulsing effect
-                            hotspot.sphere.material.opacity = 0.7 + Math.sin(time * 3 + index * 2) * 0.3;
-                            hotspot.glow.material.opacity = 0.4 + Math.sin(time * 2 + index * 2) * 0.2;
-                            
-                            // Gentle floating - use new base positions
-                            const baseY = index === 0 ? 1.5 : 1; // Cyan: 1.5, Orange: 1
-                            hotspot.sphere.position.y = baseY + Math.sin(time * 1.5 + index * 3) * 0.2;
-                            hotspot.glow.position.copy(hotspot.sphere.position);
-                        }
-                    });
                 }
             } else {
                 // Outside: render gallery with portal previews
@@ -1117,9 +647,6 @@
         async function init() {
             document.getElementById('loading-text').textContent = 'two secs, just creating portal gallery...';
 
-            // Create hotspots first
-            createHotspots();
-
             for (let i = 0; i < PORTAL_CONFIGS.length; i++) {
                 document.getElementById('loading-text').textContent = `Loading portal ${i + 1}/${PORTAL_CONFIGS.length}...`;
                 await createPortal(PORTAL_CONFIGS[i], i);
@@ -1132,7 +659,7 @@
             document.getElementById('file-info').style.display = 'block';
 
             animate();
-            console.log('✅ Portal gallery with hotspots ready!');
+            console.log('Ta daa! Portal gallery ready!');
         }
 
         // ====== WINDOW RESIZE ======

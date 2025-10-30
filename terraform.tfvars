@@ -1,0 +1,6 @@
+instance_name = "nerfstudio-gpu-a40-16q"
+key_name      = "spencer-key"
+network_name  = "nerfstudio-network"
+flavor_name   = "gpu16.A40-16Q"
+image_name    = "ubuntu-20.04-server-amd64.raw"
+volume_size   = 200  # Reduced from 300 to maximallowed_cidr  = "0.0.0.0/0"
