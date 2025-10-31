@@ -145,6 +145,78 @@
         #hotspot-info.show {
             opacity: 1;
         }
+        #hotspot-controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 100;
+            max-width: 300px;
+            border: 1px solid rgba(74, 158, 255, 0.3);
+        }
+        #hotspot-controls.show {
+            opacity: 1;
+        }
+        #hotspot-controls h3 {
+            margin: 0 0 15px 0;
+            font-size: 14px;
+            color: #4a9eff;
+        }
+        .hotspot-slider-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+        }
+        .hotspot-slider-group h4 {
+            margin: 0 0 10px 0;
+            font-size: 12px;
+        }
+        .cyan-group h4 {
+            color: #00ffff;
+        }
+        .orange-group h4 {
+            color: #ff6600;
+        }
+        .slider-row {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .slider-row label {
+            width: 15px;
+            font-weight: bold;
+        }
+        .slider-row input[type="range"] {
+            flex: 1;
+            margin: 0 8px;
+            height: 20px;
+        }
+        .slider-row span {
+            width: 40px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .reset-btn {
+            background: rgba(74, 158, 255, 0.8);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            margin-top: 5px;
+        }
+        .reset-btn:hover {
+            background: rgba(74, 158, 255, 1);
+        }
     </style>
 </head>
 <body>
@@ -185,6 +257,54 @@
 
     <div id="hotspot-info">
         🎯 Click glowing spheres! (Cyan=info.mp3, Orange=bass.mp3) Click again to stop!
+    </div>
+
+    <div id="hotspot-controls">
+        <h3>🎯 Hotspot Position Controls</h3>
+        
+        <div class="hotspot-slider-group cyan-group">
+            <h4>Cyan Hotspot (info.mp3)</h4>
+            <div class="slider-row">
+                <label>X:</label>
+                <input type="range" id="cyan-x" min="-12" max="12" step="0.1" value="7">
+                <span id="cyan-x-val">7.0</span>
+            </div>
+            <div class="slider-row">
+                <label>Y:</label>
+                <input type="range" id="cyan-y" min="-4" max="4" step="0.1" value="-2">
+                <span id="cyan-y-val">-2.0</span>
+            </div>
+            <div class="slider-row">
+                <label>Z:</label>
+                <input type="range" id="cyan-z" min="-4" max="10" step="0.1" value="-2">
+                <span id="cyan-z-val">-2.0</span>
+            </div>
+            <button class="reset-btn" onclick="resetCyanPosition()">Reset</button>
+        </div>
+
+        <div class="hotspot-slider-group orange-group">
+            <h4>Orange Hotspot (bass.mp3)</h4>
+            <div class="slider-row">
+                <label>X:</label>
+                <input type="range" id="orange-x" min="-12" max="12" step="0.1" value="-2.5">
+                <span id="orange-x-val">-2.5</span>
+            </div>
+            <div class="slider-row">
+                <label>Y:</label>
+                <input type="range" id="orange-y" min="-4" max="4" step="0.1" value="-3">
+                <span id="orange-y-val">-3.0</span>
+            </div>
+            <div class="slider-row">
+                <label>Z:</label>
+                <input type="range" id="orange-z" min="-4" max="10" step="0.1" value="8.1">
+                <span id="orange-z-val">8.1</span>
+            </div>
+            <button class="reset-btn" onclick="resetOrangePosition()">Reset</button>
+        </div>
+        
+        <div style="margin-top: 15px; font-size: 10px; color: #ccc;">
+            Move sliders to position hotspots! Range: X/Y ±12/±4, Z -4→10
+        </div>
     </div>
 
     <script type="importmap">
@@ -344,6 +464,12 @@
         // Audio tracking system for stop/play functionality
         let currentlyPlayingAudio = [null, null]; // Track audio sources for each hotspot
         let currentlyPlayingType = [null, null];  // Track type: 'file', 'synthetic', or null
+        
+        // Hotspot position tracking
+        let hotspotPositions = [
+            { x: 7, y: -2, z: -2 },        // Cyan hotspot position
+            { x: -2.5, y: -3, z: 8.1 }     // Orange hotspot new position
+        ];
         
         // Audio files - Replace these paths with your own audio files
         // For now, we'll use synthetic audio generation which always works
@@ -599,7 +725,7 @@
                 emissive: 0x003333 // Add emissive glow
             });
             const hotspot1 = new THREE.Mesh(hotspot1Geometry, hotspot1Material);
-            hotspot1.position.set(2, 1.5, 3); // Moved right (0→2), lower (3→1.5), kept z at 3
+            hotspot1.position.set(hotspotPositions[0].x, hotspotPositions[0].y, hotspotPositions[0].z);
             hotspot1.userData = { 
                 isHotspot: true, 
                 audioIndex: 0,
@@ -627,7 +753,7 @@
                 emissive: 0x331100 // Add emissive glow
             });
             const hotspot2 = new THREE.Mesh(hotspot2Geometry, hotspot2Material);
-            hotspot2.position.set(-4, 1, 5); // Forward (3→6), down (2→1), slightly less left (-3→-1)
+            hotspot2.position.set(hotspotPositions[1].x, hotspotPositions[1].y, hotspotPositions[1].z);
             hotspot2.userData = { 
                 isHotspot: true, 
                 audioIndex: 1,
@@ -674,7 +800,121 @@
             console.log('✅ Hotspots created with enhanced visibility');
             console.log(`   Cyan hotspot at: (${hotspot1.position.x}, ${hotspot1.position.y}, ${hotspot1.position.z})`);
             console.log(`   Orange hotspot at: (${hotspot2.position.x}, ${hotspot2.position.y}, ${hotspot2.position.z})`);
+            
+            // Initialize slider controls
+            initializeSliderControls();
         }
+
+        // Initialize slider controls
+        function initializeSliderControls() {
+            // Cyan hotspot sliders
+            const cyanXSlider = document.getElementById('cyan-x');
+            const cyanYSlider = document.getElementById('cyan-y');
+            const cyanZSlider = document.getElementById('cyan-z');
+            const cyanXVal = document.getElementById('cyan-x-val');
+            const cyanYVal = document.getElementById('cyan-y-val');
+            const cyanZVal = document.getElementById('cyan-z-val');
+
+            // Orange hotspot sliders
+            const orangeXSlider = document.getElementById('orange-x');
+            const orangeYSlider = document.getElementById('orange-y');
+            const orangeZSlider = document.getElementById('orange-z');
+            const orangeXVal = document.getElementById('orange-x-val');
+            const orangeYVal = document.getElementById('orange-y-val');
+            const orangeZVal = document.getElementById('orange-z-val');
+
+            // Update functions
+            function updateCyanPosition() {
+                const x = parseFloat(cyanXSlider.value);
+                const y = parseFloat(cyanYSlider.value);
+                const z = parseFloat(cyanZSlider.value);
+                
+                hotspotPositions[0] = { x, y, z };
+                
+                if (hotspots[0]) {
+                    hotspots[0].sphere.position.set(x, y, z);
+                    hotspots[0].glow.position.set(x, y, z);
+                }
+                
+                cyanXVal.textContent = x.toFixed(1);
+                cyanYVal.textContent = y.toFixed(1);
+                cyanZVal.textContent = z.toFixed(1);
+                
+                console.log(`🎯 Cyan hotspot moved to: (${x}, ${y}, ${z})`);
+            }
+
+            function updateOrangePosition() {
+                const x = parseFloat(orangeXSlider.value);
+                const y = parseFloat(orangeYSlider.value);
+                const z = parseFloat(orangeZSlider.value);
+                
+                hotspotPositions[1] = { x, y, z };
+                
+                if (hotspots[1]) {
+                    hotspots[1].sphere.position.set(x, y, z);
+                    hotspots[1].glow.position.set(x, y, z);
+                }
+                
+                orangeXVal.textContent = x.toFixed(1);
+                orangeYVal.textContent = y.toFixed(1);
+                orangeZVal.textContent = z.toFixed(1);
+                
+                console.log(`🎯 Orange hotspot moved to: (${x}, ${y}, ${z})`);
+            }
+
+            // Add event listeners
+            cyanXSlider.addEventListener('input', updateCyanPosition);
+            cyanYSlider.addEventListener('input', updateCyanPosition);
+            cyanZSlider.addEventListener('input', updateCyanPosition);
+            orangeXSlider.addEventListener('input', updateOrangePosition);
+            orangeYSlider.addEventListener('input', updateOrangePosition);
+            orangeZSlider.addEventListener('input', updateOrangePosition);
+
+            console.log('✅ Slider controls initialized');
+        }
+
+        // Reset functions (called by buttons)
+        function resetCyanPosition() {
+            document.getElementById('cyan-x').value = 7;
+            document.getElementById('cyan-y').value = -2;
+            document.getElementById('cyan-z').value = -2;
+            
+            hotspotPositions[0] = { x: 7, y: -2, z: -2 };
+            
+            if (hotspots[0]) {
+                hotspots[0].sphere.position.set(7, -2, -2);
+                hotspots[0].glow.position.set(7, -2, -2);
+            }
+            
+            document.getElementById('cyan-x-val').textContent = '7.0';
+            document.getElementById('cyan-y-val').textContent = '-2.0';
+            document.getElementById('cyan-z-val').textContent = '-2.0';
+            
+            console.log('🎯 Cyan hotspot reset to default position (7, -2, -2)');
+        }
+
+        function resetOrangePosition() {
+            document.getElementById('orange-x').value = -2.5;
+            document.getElementById('orange-y').value = -3;
+            document.getElementById('orange-z').value = 8.1;
+            
+            hotspotPositions[1] = { x: -2.5, y: -3, z: 8.1 };
+            
+            if (hotspots[1]) {
+                hotspots[1].sphere.position.set(-2.5, -3, 8.1);
+                hotspots[1].glow.position.set(-2.5, -3, 8.1);
+            }
+            
+            document.getElementById('orange-x-val').textContent = '-2.5';
+            document.getElementById('orange-y-val').textContent = '-3.0';
+            document.getElementById('orange-z-val').textContent = '8.1';
+            
+            console.log('🎯 Orange hotspot reset to default position (-2.5, -3, 8.1)');
+        }
+
+        // Make reset functions globally accessible for HTML buttons
+        window.resetCyanPosition = resetCyanPosition;
+        window.resetOrangePosition = resetOrangePosition;
 
         function createSplatControls() {
             const controls = new OrbitControls(camera, renderer.domElement);
@@ -934,7 +1174,8 @@
                     console.log(`   Hotspot ${index + 1} opacity:`, hotspot.sphere.material.opacity);
                 });
                 document.getElementById('hotspot-info').classList.add('show');
-                console.log('✅ Hotspots should now be visible!');
+                document.getElementById('hotspot-controls').classList.add('show'); // Show control panel
+                console.log('✅ Hotspots and controls should now be visible!');
             } else {
                 console.log('⚪ Not middle portal, hiding hotspots');
                 hotspots.forEach(hotspot => {
@@ -950,6 +1191,7 @@
                     }
                 });
                 document.getElementById('hotspot-info').classList.remove('show');
+                document.getElementById('hotspot-controls').classList.remove('show'); // Hide control panel
             }
 
             let instructionText = `
@@ -1032,6 +1274,7 @@
             spotlight3.visible = true;
 
             document.getElementById('hotspot-info').classList.remove('show');
+            document.getElementById('hotspot-controls').classList.remove('show'); // Hide control panel
 
             document.getElementById('instructions').innerHTML = `
                 <h2>🌀 Gallery Controls</h2>
@@ -1076,9 +1319,10 @@
                             hotspot.sphere.material.opacity = 0.7 + Math.sin(time * 3 + index * 2) * 0.3;
                             hotspot.glow.material.opacity = 0.4 + Math.sin(time * 2 + index * 2) * 0.2;
                             
-                            // Gentle floating - use new base positions
-                            const baseY = index === 0 ? 1.5 : 1; // Cyan: 1.5, Orange: 1
-                            hotspot.sphere.position.y = baseY + Math.sin(time * 1.5 + index * 3) * 0.2;
+                            // Gentle floating - use current position from sliders as base
+                            const baseY = hotspotPositions[index].y;
+                            const floatOffset = Math.sin(time * 1.5 + index * 3) * 0.2;
+                            hotspot.sphere.position.y = baseY + floatOffset;
                             hotspot.glow.position.copy(hotspot.sphere.position);
                         }
                     });
