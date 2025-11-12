@@ -231,8 +231,10 @@
             opacity: 0;
             transition: opacity 0.3s;
             z-index: 100;
-            max-width: 300px;
+            max-width: 350px;
             border: 1px solid rgba(255, 0, 255, 0.5);
+            max-height: 80vh;
+            overflow-y: auto;
         }
         #video-controls.show {
             opacity: 1;
@@ -358,7 +360,7 @@
         </div>
     </div>
 
-    <!-- NEW: Video Controls -->
+    <!-- VIDEO CONTROLS -->
     <div id="video-controls">
         <h3>🎬 Video Feed Controls</h3>
         <div style="margin-bottom: 15px;">
@@ -398,12 +400,34 @@
                 <input type="range" id="video-scale" min="0.1" max="5.0" step="0.1" value="1.0">
                 <span id="video-scale-val" style="width: 40px; text-align: right; font-family: monospace; font-size: 11px;">1.0</span>
             </div>
-            <button class="reset-btn" style="background: rgba(255, 0, 255, 0.7);" onclick="resetVideoPosition()">Reset Position</button>
+        </div>
+        
+        <!-- Video Rotation Controls -->
+        <div style="margin-top: 15px; padding: 10px; border: 1px solid rgba(255, 0, 255, 0.3); border-radius: 5px;">
+            <h4 style="margin: 0 0 10px 0; font-size: 12px; color: #ff00ff;">🔄 Video Screen Rotation</h4>
+            <div class="slider-row">
+                <label style="width: 15px; font-weight: bold; color: #ff00ff;">X:</label>
+                <input type="range" id="video-rot-x" min="-180" max="180" step="1" value="0">
+                <span id="video-rot-x-val" style="width: 40px; text-align: right; font-family: monospace; font-size: 11px;">0°</span>
+            </div>
+            <div class="slider-row">
+                <label style="width: 15px; font-weight: bold; color: #ff00ff;">Y:</label>
+                <input type="range" id="video-rot-y" min="-180" max="180" step="1" value="0">
+                <span id="video-rot-y-val" style="width: 40px; text-align: right; font-family: monospace; font-size: 11px;">0°</span>
+            </div>
+            <div class="slider-row">
+                <label style="width: 15px; font-weight: bold; color: #ff00ff;">Z:</label>
+                <input type="range" id="video-rot-z" min="-180" max="180" step="1" value="0">
+                <span id="video-rot-z-val" style="width: 40px; text-align: right; font-family: monospace; font-size: 11px;">0°</span>
+            </div>
+            <button class="reset-btn" style="background: rgba(255, 0, 255, 0.7);" onclick="resetVideoTransform()">Reset All Transform</button>
         </div>
         
         <div style="margin-top: 15px; font-size: 9px; color: #ccc; line-height: 1.3;">
             Video appears as floating screen in Portal 3!<br>
-            <strong>Controls:</strong> Position (X,Y,Z) + Scale (0.1x - 5.0x)<br>
+            <strong>Position:</strong> X,Y,Z coordinates<br>
+            <strong>Scale:</strong> 0.1x - 5.0x<br>
+            <strong>Rotation:</strong> X,Y,Z angles (-180° to +180°)<br>
             <strong>Example URLs:</strong><br>
             • https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4<br>
             • https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4<br>
@@ -426,24 +450,27 @@
         import * as GaussianSplats3D from 'https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@latest/build/gaussian-splats-3d.module.min.js';
 
         // ====== VIDEO SYSTEM ======
+        // Hidden video element that serves as texture source
         let videoElement = document.getElementById('hidden-video');
-        let videoTexture = null;
-        let videoScreen = null;
-        let videoMaterial = null;
-        let isVideoActive = false;
+        let videoTexture = null;          // Three.js video texture
+        let videoScreen = null;            // The mesh displaying the video
+        let videoMaterial = null;          // Material for video mesh
+        let isVideoActive = false;         // Track if video is currently playing
 
-        // Video positioning system
-        let videoPosition = { x: 0, y: 1, z: 2 }; // Default position
-        let videoScale = 1.0; // Default scale
+        // Video transformation properties (position, scale, rotation)
+        let videoPosition = { x: 0, y: 1, z: 2 }; // Default 3D position
+        let videoScale = 1.0;                      // Default scale multiplier
+        let videoRotation = { x: 0, y: 0, z: 0 }; // Default rotation in radians
 
         // ====== PORTAL CONFIGURATION ======
+        // Define the three portal scenes with their properties
         const PORTAL_CONFIGS = [
             {
                 name: "First Guassian Test iPhone and Record3D",
                 splatFile: "https://huggingface.co/mysterytreebeast/gaussian-splat-models/resolve/main/frontroom_1506.ply",
                 position: { x: -5, y: 0.5, z: -5 },
                 color: 0x4a9eff,
-                parallaxStrength: 0.5,
+                parallaxStrength: 0.5,  // How much camera movement affects portal view
                 scale: 5
             },
             {
@@ -468,9 +495,11 @@
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0a0a0a);
 
+        // Setup main camera with 50° FOV
         const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
         camera.position.set(0, 1.6, 8);
 
+        // Setup WebGL renderer with shadows
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -479,6 +508,7 @@
 
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
+        // Setup orbit controls for main gallery view
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
@@ -488,6 +518,10 @@
         controls.target.set(0, 0.8, -3);
 
         // ====== VIDEO FUNCTIONS ======
+        /**
+         * Creates a 3D plane mesh to display video content
+         * Sets up video texture and material with proper settings
+         */
         function createVideoScreen() {
             console.log('🎬 Creating video screen...');
             console.log('Video element state:', {
@@ -498,7 +532,7 @@
                 currentTime: videoElement.currentTime
             });
             
-            // Create video texture with proper settings
+            // Create video texture with proper settings for dynamic updates
             videoTexture = new THREE.VideoTexture(videoElement);
             videoTexture.minFilter = THREE.LinearFilter;
             videoTexture.magFilter = THREE.LinearFilter;
@@ -507,28 +541,39 @@
             videoTexture.wrapS = THREE.ClampToEdgeWrapping;
             videoTexture.wrapT = THREE.ClampToEdgeWrapping;
             
-            // Create video material
+            // Create material with video texture
             videoMaterial = new THREE.MeshBasicMaterial({ 
                 map: videoTexture,
-                side: THREE.DoubleSide,
+                side: THREE.DoubleSide,  // Visible from both sides
                 transparent: false
             });
             
-            // Create video screen (16:9 aspect ratio) - this is the main mesh
+            // Create 16:9 aspect ratio plane for video display
             const screenGeometry = new THREE.PlaneGeometry(4, 2.25);
             videoScreen = new THREE.Mesh(screenGeometry, videoMaterial);
+            
+            // Apply initial transformation
             videoScreen.position.set(videoPosition.x, videoPosition.y, videoPosition.z);
             videoScreen.scale.set(videoScale, videoScale, videoScale);
+            videoScreen.rotation.set(
+                videoRotation.x * Math.PI / 180,
+                videoRotation.y * Math.PI / 180,
+                videoRotation.z * Math.PI / 180
+            );
             videoScreen.userData = { isVideoScreen: true };
             
             console.log('✅ Video screen created at position:', videoScreen.position, 'with scale:', videoScale);
-            return videoScreen; // Return just the mesh, not a group
+            return videoScreen;
         }
 
+        /**
+         * Adds video screen to a specific portal's scene
+         * @param {number} portalIndex - Index of portal to add video to (default: 2)
+         */
         function addVideoToPortal(portalIndex = 2) {
             const portal = portals[portalIndex];
             if (portal && portal.scene && videoScreen) {
-                // Remove from any previous parent
+                // Remove from any previous parent first
                 if (videoScreen.parent) {
                     videoScreen.parent.remove(videoScreen);
                 }
@@ -539,6 +584,9 @@
             }
         }
 
+        /**
+         * Removes video screen from its current parent portal
+         */
         function removeVideoFromPortal() {
             if (videoScreen && videoScreen.parent) {
                 videoScreen.parent.remove(videoScreen);
@@ -546,7 +594,13 @@
             }
         }
 
-        // Video control functions (made global for HTML buttons)
+        // ====== VIDEO CONTROL FUNCTIONS ======
+        // Made global for HTML button onclick handlers
+
+        /**
+         * Loads video from user-provided URL
+         * Handles CORS and autoplay policies
+         */
         window.loadVideoFromURL = function() {
             const urlInput = document.getElementById('video-url-input');
             const videoUrl = urlInput.value.trim();
@@ -559,7 +613,7 @@
             try {
                 console.log('🔗 Loading video from URL:', videoUrl);
                 
-                // Stop any existing video first
+                // Stop any existing video stream first
                 if (videoElement.srcObject) {
                     const stream = videoElement.srcObject;
                     const tracks = stream.getTracks();
@@ -570,23 +624,25 @@
                 // Set video source to URL
                 videoElement.src = videoUrl;
                 videoElement.crossOrigin = "anonymous"; // For CORS
-                videoElement.loop = true; // Loop the video
-                videoElement.muted = true; // Start muted (browser autoplay policy)
+                videoElement.loop = true;
+                videoElement.muted = true; // Required for autoplay
                 videoElement.play();
                 
+                // Create video screen if it doesn't exist
                 if (!videoScreen) {
                     createVideoScreen();
                 }
                 
                 isVideoActive = true;
                 
+                // Update button states
                 document.getElementById('webcam-btn').disabled = true;
                 document.getElementById('test-video-btn').disabled = true;
                 document.getElementById('stop-video-btn').disabled = false;
                 
                 console.log('✅ Video URL loaded successfully');
                 
-                // Add video to portal 3 if we're currently in it
+                // Add to portal if currently viewing it
                 if (activePortalIndex === 2) {
                     addVideoToPortal(2);
                 }
@@ -597,6 +653,10 @@
             }
         };
 
+        /**
+         * Starts webcam feed as video source
+         * Requests camera permissions and handles errors
+         */
         window.startWebcam = async function() {
             try {
                 console.log('📷 Starting webcam...');
@@ -608,11 +668,12 @@
                     tracks.forEach(track => track.stop());
                 }
                 
+                // Request webcam access with ideal resolution
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
                         width: { ideal: 1280 }, 
                         height: { ideal: 720 },
-                        facingMode: 'user'
+                        facingMode: 'user'  // Front-facing camera
                     },
                     audio: false 
                 });
@@ -620,12 +681,13 @@
                 console.log('📹 Webcam stream acquired:', stream);
                 console.log('Video tracks:', stream.getVideoTracks());
                 
+                // Configure video element for webcam
                 videoElement.srcObject = stream;
                 videoElement.muted = true;
                 videoElement.autoplay = true;
                 videoElement.playsInline = true;
                 
-                // Wait for video to be ready
+                // Wait for video metadata to load
                 videoElement.onloadedmetadata = () => {
                     console.log('📺 Webcam metadata loaded:', {
                         videoWidth: videoElement.videoWidth,
@@ -639,19 +701,21 @@
                     });
                 };
                 
+                // Create video screen if needed
                 if (!videoScreen) {
                     createVideoScreen();
                 }
                 
                 isVideoActive = true;
                 
+                // Update button states
                 document.getElementById('webcam-btn').disabled = true;
                 document.getElementById('test-video-btn').disabled = true;
                 document.getElementById('stop-video-btn').disabled = false;
                 
                 console.log('✅ Webcam started successfully');
                 
-                // Add video to portal 3 if we're currently in it
+                // Add to portal if viewing it
                 if (activePortalIndex === 2) {
                     addVideoToPortal(2);
                 }
@@ -660,6 +724,7 @@
                 console.error('❌ Webcam access failed:', error);
                 let errorMsg = 'Could not access webcam.';
                 
+                // Provide specific error messages
                 if (error.name === 'NotAllowedError') {
                     errorMsg += ' Please check camera permissions.';
                 } else if (error.name === 'NotFoundError') {
@@ -674,11 +739,15 @@
             }
         };
 
+        /**
+         * Loads a procedurally generated test video
+         * Creates animated color bars using canvas
+         */
         window.loadTestVideo = function() {
             try {
                 console.log('🎥 Loading test video...');
                 
-                // Stop any existing video first
+                // Stop any existing video
                 if (videoElement.srcObject) {
                     const stream = videoElement.srcObject;
                     const tracks = stream.getTracks();
@@ -686,7 +755,7 @@
                     videoElement.srcObject = null;
                 }
                 
-                // Create a larger test video canvas for better visibility
+                // Create canvas for test pattern
                 const canvas = document.createElement('canvas');
                 canvas.width = 640;
                 canvas.height = 360;
@@ -694,7 +763,10 @@
                 
                 console.log('📺 Canvas created:', canvas.width + 'x' + canvas.height);
                 
-                // Create animated color bars with debugging info
+                /**
+                 * Draws animated color bars with time and frame info
+                 * Called repeatedly via requestAnimationFrame
+                 */
                 function drawColorBars() {
                     const time = Date.now() * 0.001;
                     
@@ -702,7 +774,7 @@
                     ctx.fillStyle = '#000000';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     
-                    // Draw animated color bars
+                    // Draw animated rainbow color bars
                     const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffffff'];
                     
                     for (let i = 0; i < colors.length; i++) {
@@ -715,17 +787,15 @@
                         ctx.fillRect(i * barWidth, yOffset + animOffset, barWidth - 2, barHeight);
                     }
                     
-                    // Add large visible text
+                    // Add text overlays for debugging
                     ctx.fillStyle = 'white';
                     ctx.font = 'bold 32px Arial';
                     ctx.textAlign = 'center';
                     ctx.fillText('TEST VIDEO', canvas.width/2, 40);
                     
-                    // Add timestamp
                     ctx.font = 'bold 24px Arial';
                     ctx.fillText(`Time: ${time.toFixed(1)}s`, canvas.width/2, canvas.height - 20);
                     
-                    // Add frame counter
                     ctx.font = '16px Arial';
                     ctx.fillText(`Frame: ${Math.floor(time * 30)}`, canvas.width/2, canvas.height - 50);
                     
@@ -734,19 +804,19 @@
                 
                 drawColorBars();
                 
-                // Create video stream from canvas with explicit frame rate
+                // Create video stream from canvas at 30fps
                 const stream = canvas.captureStream(30);
                 console.log('🎬 Canvas stream created:', stream);
                 console.log('Stream tracks:', stream.getTracks());
                 
-                // Set up video element properly
+                // Configure video element
                 videoElement.srcObject = stream;
                 videoElement.muted = true;
                 videoElement.loop = true;
                 videoElement.autoplay = true;
                 videoElement.playsInline = true;
                 
-                // Wait for video to be ready then play
+                // Wait for metadata then play
                 videoElement.onloadedmetadata = () => {
                     console.log('📺 Video metadata loaded:', {
                         videoWidth: videoElement.videoWidth,
@@ -760,19 +830,21 @@
                     });
                 };
                 
+                // Create video screen if needed
                 if (!videoScreen) {
                     createVideoScreen();
                 }
                 
                 isVideoActive = true;
                 
+                // Update button states
                 document.getElementById('webcam-btn').disabled = true;
                 document.getElementById('test-video-btn').disabled = true;
                 document.getElementById('stop-video-btn').disabled = false;
                 
                 console.log('✅ Test video setup complete');
                 
-                // Add video to portal 3 if we're currently in it
+                // Add to portal if viewing it
                 if (activePortalIndex === 2) {
                     addVideoToPortal(2);
                 }
@@ -783,9 +855,13 @@
             }
         };
 
+        /**
+         * Stops all video playback and cleans up resources
+         */
         window.stopVideo = function() {
             console.log('⏹️ Stopping video...');
             
+            // Stop media stream tracks
             if (videoElement.srcObject) {
                 const stream = videoElement.srcObject;
                 const tracks = stream.getTracks();
@@ -796,6 +872,7 @@
             removeVideoFromPortal();
             isVideoActive = false;
             
+            // Update button states
             document.getElementById('webcam-btn').disabled = false;
             document.getElementById('test-video-btn').disabled = false;
             document.getElementById('stop-video-btn').disabled = true;
@@ -804,8 +881,10 @@
         };
 
         // ====== LIGHTING SETUP ======
+        // Add ambient light for general scene illumination
         scene.add(new THREE.AmbientLight(0x111111, 0.2));
 
+        // Spotlight for left portal (blue tint)
         const spotlight1 = new THREE.SpotLight(0x4a9eff, 10);
         spotlight1.position.set(-5, 8, -3);
         spotlight1.angle = Math.PI / 5;
@@ -817,6 +896,7 @@
         scene.add(spotlight1);
         scene.add(spotlight1.target);
 
+        // Spotlight for middle portal (red tint)
         const spotlight2 = new THREE.SpotLight(0xff3333, 10);
         spotlight2.position.set(0, 8, -4);
         spotlight2.angle = Math.PI / 5;
@@ -828,6 +908,7 @@
         scene.add(spotlight2);
         scene.add(spotlight2.target);
 
+        // Spotlight for right portal (light blue tint)
         const spotlight3 = new THREE.SpotLight(0xaaccff, 10);
         spotlight3.position.set(5, 8, -3);
         spotlight3.angle = Math.PI / 5;
@@ -840,6 +921,7 @@
         scene.add(spotlight3.target);
 
         // ====== ROOM GEOMETRY ======
+        // Create floor plane
         const floor = new THREE.Mesh(
             new THREE.PlaneGeometry(30, 30),
             new THREE.MeshStandardMaterial({ color: 0x1fffff })
@@ -849,27 +931,33 @@
         floor.receiveShadow = true;
         scene.add(floor);
 
+        // Create room walls
         const wallMat = new THREE.MeshStandardMaterial({ 
             color: 0xffffff, 
             side: THREE.DoubleSide 
         });
+        
+        // Back wall
         const backWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 10), wallMat);
         backWall.position.set(0, 4, -8);
         backWall.receiveShadow = true;
         scene.add(backWall);
 
+        // Left wall
         const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), wallMat);
         leftWall.position.set(-10, 4, 0);
         leftWall.rotation.y = Math.PI / 2;
         leftWall.receiveShadow = true;
         scene.add(leftWall);
 
+        // Right wall
         const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), wallMat);
         rightWall.position.set(10, 4, 0);
         rightWall.rotation.y = -Math.PI / 2;
         rightWall.receiveShadow = true;
         scene.add(rightWall);
 
+        // Add decorative cube for reference
         const cube = new THREE.Mesh(
             new THREE.BoxGeometry(0.8, 0.8, 0.8),
             new THREE.MeshStandardMaterial({ color: 0xFFFF00 })
@@ -880,24 +968,32 @@
         scene.add(cube);
 
         // ====== PORTAL SYSTEM ======
-        const portals = [];
-        let activePortalIndex = -1;
-        let isInSplatScene = false;
-        let splatControls = null;
+        const portals = [];              // Array of portal objects
+        let activePortalIndex = -1;      // Currently active portal (-1 = none)
+        let isInSplatScene = false;      // Whether user is inside a portal
+        let splatControls = null;        // OrbitControls for inside portal view
 
         // ====== HOTSPOT SYSTEM ======
+        // Interactive audio hotspots for portal 2
         const hotspots = [];
-        let audioContext = null;
-        let currentlyPlayingAudio = [null, null];
-        let currentlyPlayingType = [null, null];
+        let audioContext = null;                    // Web Audio API context
+        let currentlyPlayingAudio = [null, null];   // Currently playing audio sources
+        let currentlyPlayingType = [null, null];    // Type of audio playing (file/synthetic)
+        
+        // Initial hotspot positions (can be adjusted with sliders)
         let hotspotPositions = [
-            { x: 7, y: -2, z: -2 },
-            { x: 2.8, y: -3, z: 6.8 }
+            { x: 7, y: -2, z: -2 },      // Cyan hotspot
+            { x: 2.8, y: -3, z: 6.8 }    // Orange hotspot
         ];
         
         const AUDIO_FILES = ['info.mp3', 'bass.mp3'];
 
-        // Audio and hotspot functions
+        // ====== AUDIO FUNCTIONS ======
+        /**
+         * Creates a simple synthetic audio tone as fallback
+         * @param {number} audioIndex - Index of hotspot (0 or 1)
+         * @returns {OscillatorNode} Audio oscillator or null
+         */
         function createSyntheticAudio(audioIndex) {
             if (!audioContext) return null;
             
@@ -907,12 +1003,14 @@
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
             
+            // Different frequencies for each hotspot
             const frequencies = [800, 400];
             const frequency = frequencies[audioIndex] || 440;
             
             oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
             oscillator.type = 'sine';
             
+            // Fade in/out envelope
             gainNode.gain.setValueAtTime(0, audioContext.currentTime);
             gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
@@ -923,6 +1021,10 @@
             return oscillator;
         }
 
+        /**
+         * Initializes Web Audio API context
+         * Required for playing audio on the web
+         */
         function initAudioContext() {
             if (!audioContext) {
                 try {
@@ -933,9 +1035,15 @@
             }
         }
 
+        /**
+         * Plays or stops audio for a hotspot
+         * Tries to load external file, falls back to synthetic audio
+         * @param {number} audioIndex - Index of hotspot (0 or 1)
+         */
         async function playAudio(audioIndex) {
             console.log(`🔊 Audio control for hotspot ${audioIndex + 1}`);
             
+            // If already playing, stop it
             if (currentlyPlayingAudio[audioIndex]) {
                 stopAudio(audioIndex);
                 return;
@@ -944,12 +1052,14 @@
             try {
                 initAudioContext();
                 
+                // Resume audio context if suspended (mobile requirement)
                 if (audioContext && audioContext.state === 'suspended') {
                     await audioContext.resume();
                 }
 
                 const audioUrl = AUDIO_FILES[audioIndex];
                 
+                // Try to load external audio file
                 if (audioUrl) {
                     try {
                         const response = await fetch(audioUrl);
@@ -978,6 +1088,7 @@
                     }
                 }
                 
+                // Fallback to synthetic audio
                 if (audioContext) {
                     const oscillator = createSyntheticAudio(audioIndex);
                     if (oscillator) {
@@ -1002,6 +1113,10 @@
             }
         }
 
+        /**
+         * Stops audio playback for a specific hotspot
+         * @param {number} audioIndex - Index of hotspot (0 or 1)
+         */
         function stopAudio(audioIndex) {
             const audioSource = currentlyPlayingAudio[audioIndex];
             const audioType = currentlyPlayingType[audioIndex];
@@ -1023,6 +1138,11 @@
             }
         }
 
+        /**
+         * Shows on-screen feedback when audio starts playing
+         * @param {number} audioIndex - Hotspot index
+         * @param {string} audioType - Type of audio (file/synthetic/visual)
+         */
         function showAudioFeedback(audioIndex, audioType = 'visual') {
             const feedback = document.createElement('div');
             feedback.style.cssText = `
@@ -1059,6 +1179,7 @@
             feedback.style.whiteSpace = 'pre-line';
             document.body.appendChild(feedback);
             
+            // Auto-remove after 2 seconds
             setTimeout(() => {
                 if (document.body.contains(feedback)) {
                     document.body.removeChild(feedback);
@@ -1066,6 +1187,10 @@
             }, 2000);
         }
 
+        /**
+         * Shows feedback when audio is stopped
+         * @param {number} audioIndex - Hotspot index
+         */
         function showStopFeedback(audioIndex) {
             const feedback = document.createElement('div');
             feedback.style.cssText = `
@@ -1091,6 +1216,7 @@
             feedback.style.whiteSpace = 'pre-line';
             document.body.appendChild(feedback);
             
+            // Auto-remove after 1.5 seconds
             setTimeout(() => {
                 if (document.body.contains(feedback)) {
                     document.body.removeChild(feedback);
@@ -1098,9 +1224,14 @@
             }, 1500);
         }
 
+        /**
+         * Creates the interactive audio hotspot spheres
+         * Two colored spheres with glow effects
+         */
         function createHotspots() {
             console.log('🎯 Creating hotspots...');
             
+            // Create cyan hotspot (first audio point)
             const hotspot1Geometry = new THREE.SphereGeometry(0.4, 16, 16);
             const hotspot1Material = new THREE.MeshBasicMaterial({ 
                 color: 0x00ffff,
@@ -1116,6 +1247,7 @@
                 name: 'Audio Point 1'
             };
             
+            // Create glow effect for cyan hotspot
             const hotspot1Glow = new THREE.Mesh(
                 new THREE.SphereGeometry(0.6, 16, 16),
                 new THREE.MeshBasicMaterial({ 
@@ -1127,6 +1259,7 @@
             );
             hotspot1Glow.position.copy(hotspot1.position);
             
+            // Create orange hotspot (second audio point)
             const hotspot2Geometry = new THREE.SphereGeometry(0.4, 16, 16);
             const hotspot2Material = new THREE.MeshBasicMaterial({ 
                 color: 0xff6600,
@@ -1142,6 +1275,7 @@
                 name: 'Audio Point 2'
             };
             
+            // Create glow effect for orange hotspot
             const hotspot2Glow = new THREE.Mesh(
                 new THREE.SphereGeometry(0.6, 16, 16),
                 new THREE.MeshBasicMaterial({ 
@@ -1153,6 +1287,7 @@
             );
             hotspot2Glow.position.copy(hotspot2.position);
 
+            // Add to scene but keep hidden initially
             scene.add(hotspot1);
             scene.add(hotspot1Glow);
             scene.add(hotspot2);
@@ -1163,6 +1298,7 @@
             hotspot2.visible = false;
             hotspot2Glow.visible = false;
 
+            // Store in hotspots array for management
             hotspots.push({
                 sphere: hotspot1,
                 glow: hotspot1Glow,
@@ -1178,11 +1314,16 @@
             });
 
             console.log('✅ Hotspots created with enhanced visibility');
-            initializeSliderControls();
-            initializeVideoSliderControls(); // Initialize video position sliders
+            initializeSliderControls();        // Initialize hotspot position sliders
+            initializeVideoSliderControls();   // Initialize video transform sliders
         }
 
+        /**
+         * Initializes slider controls for hotspot positioning
+         * Connects HTML range inputs to hotspot position updates
+         */
         function initializeSliderControls() {
+            // Get all slider elements for cyan hotspot
             const cyanXSlider = document.getElementById('cyan-x');
             const cyanYSlider = document.getElementById('cyan-y');
             const cyanZSlider = document.getElementById('cyan-z');
@@ -1190,6 +1331,7 @@
             const cyanYVal = document.getElementById('cyan-y-val');
             const cyanZVal = document.getElementById('cyan-z-val');
 
+            // Get all slider elements for orange hotspot
             const orangeXSlider = document.getElementById('orange-x');
             const orangeYSlider = document.getElementById('orange-y');
             const orangeZSlider = document.getElementById('orange-z');
@@ -1197,6 +1339,9 @@
             const orangeYVal = document.getElementById('orange-y-val');
             const orangeZVal = document.getElementById('orange-z-val');
 
+            /**
+             * Updates cyan hotspot position from slider values
+             */
             function updateCyanPosition() {
                 const x = parseFloat(cyanXSlider.value);
                 const y = parseFloat(cyanYSlider.value);
@@ -1214,6 +1359,9 @@
                 cyanZVal.textContent = z.toFixed(1);
             }
 
+            /**
+             * Updates orange hotspot position from slider values
+             */
             function updateOrangePosition() {
                 const x = parseFloat(orangeXSlider.value);
                 const y = parseFloat(orangeYSlider.value);
@@ -1231,6 +1379,7 @@
                 orangeZVal.textContent = z.toFixed(1);
             }
 
+            // Attach event listeners to sliders
             cyanXSlider.addEventListener('input', updateCyanPosition);
             cyanYSlider.addEventListener('input', updateCyanPosition);
             cyanZSlider.addEventListener('input', updateCyanPosition);
@@ -1241,6 +1390,10 @@
             console.log('✅ Slider controls initialized');
         }
 
+        /**
+         * Resets cyan hotspot to default position
+         * Made global for HTML button onclick
+         */
         function resetCyanPosition() {
             document.getElementById('cyan-x').value = 7;
             document.getElementById('cyan-y').value = -2;
@@ -1258,6 +1411,10 @@
             document.getElementById('cyan-z-val').textContent = '-2.0';
         }
 
+        /**
+         * Resets orange hotspot to default position
+         * Made global for HTML button onclick
+         */
         function resetOrangePosition() {
             document.getElementById('orange-x').value = -2.5;
             document.getElementById('orange-y').value = -3;
@@ -1275,34 +1432,59 @@
             document.getElementById('orange-z-val').textContent = '8.1';
         }
 
+        // Make functions global for HTML onclick handlers
         window.resetCyanPosition = resetCyanPosition;
         window.resetOrangePosition = resetOrangePosition;
 
-        // Video positioning functions
+        // ====== VIDEO POSITIONING FUNCTIONS ======
+        /**
+         * Updates video screen position, rotation, and scale from sliders
+         * Applies transformation to the video mesh in real-time
+         */
         function updateVideoPosition() {
+            // Get all slider elements
             const videoXSlider = document.getElementById('video-x');
             const videoYSlider = document.getElementById('video-y');
             const videoZSlider = document.getElementById('video-z');
             const videoScaleSlider = document.getElementById('video-scale');
+            const videoRotXSlider = document.getElementById('video-rot-x');
+            const videoRotYSlider = document.getElementById('video-rot-y');
+            const videoRotZSlider = document.getElementById('video-rot-z');
+            
+            // Get display value elements
             const videoXVal = document.getElementById('video-x-val');
             const videoYVal = document.getElementById('video-y-val');
             const videoZVal = document.getElementById('video-z-val');
             const videoScaleVal = document.getElementById('video-scale-val');
+            const videoRotXVal = document.getElementById('video-rot-x-val');
+            const videoRotYVal = document.getElementById('video-rot-y-val');
+            const videoRotZVal = document.getElementById('video-rot-z-val');
 
+            // Read all transformation values
             const x = parseFloat(videoXSlider.value);
             const y = parseFloat(videoYSlider.value);
             const z = parseFloat(videoZSlider.value);
             const scale = parseFloat(videoScaleSlider.value);
+            const rotX = parseFloat(videoRotXSlider.value);
+            const rotY = parseFloat(videoRotYSlider.value);
+            const rotZ = parseFloat(videoRotZSlider.value);
             
-            // Update global position and scale tracking
+            // Update global tracking variables
             videoPosition = { x, y, z };
             videoScale = scale;
+            videoRotation = { x: rotX, y: rotY, z: rotZ };
             
-            // Update video screen position and scale if it exists
+            // Apply transformations to video screen mesh
             if (videoScreen) {
                 videoScreen.position.set(x, y, z);
                 videoScreen.scale.set(scale, scale, scale);
-                console.log(`📺 Video screen moved to: (${x}, ${y}, ${z}) with scale: ${scale}`);
+                // Convert degrees to radians for Three.js rotation
+                videoScreen.rotation.set(
+                    rotX * Math.PI / 180,
+                    rotY * Math.PI / 180,
+                    rotZ * Math.PI / 180
+                );
+                console.log(`📺 Video screen: pos(${x}, ${y}, ${z}) scale(${scale}) rot(${rotX}°, ${rotY}°, ${rotZ}°)`);
             }
             
             // Update display values
@@ -1310,16 +1492,28 @@
             videoYVal.textContent = y.toFixed(1);
             videoZVal.textContent = z.toFixed(1);
             videoScaleVal.textContent = scale.toFixed(1);
+            videoRotXVal.textContent = rotX + '°';
+            videoRotYVal.textContent = rotY + '°';
+            videoRotZVal.textContent = rotZ + '°';
         }
 
+        /**
+         * Initializes video transformation slider controls
+         * Connects HTML range inputs to video transform updates
+         */
         function initializeVideoSliderControls() {
-            // Check if sliders exist
+            // Get all slider elements
             const videoXSlider = document.getElementById('video-x');
             const videoYSlider = document.getElementById('video-y');
             const videoZSlider = document.getElementById('video-z');
             const videoScaleSlider = document.getElementById('video-scale');
+            const videoRotXSlider = document.getElementById('video-rot-x');
+            const videoRotYSlider = document.getElementById('video-rot-y');
+            const videoRotZSlider = document.getElementById('video-rot-z');
 
-            if (!videoXSlider || !videoYSlider || !videoZSlider || !videoScaleSlider) {
+            // Check if sliders exist (DOM might not be ready)
+            if (!videoXSlider || !videoYSlider || !videoZSlider || !videoScaleSlider ||
+                !videoRotXSlider || !videoRotYSlider || !videoRotZSlider) {
                 console.warn('⚠️ Video sliders not found in DOM, retrying in 100ms...');
                 setTimeout(initializeVideoSliderControls, 100);
                 return;
@@ -1330,16 +1524,22 @@
             videoYSlider.removeEventListener('input', updateVideoPosition);
             videoZSlider.removeEventListener('input', updateVideoPosition);
             videoScaleSlider.removeEventListener('input', updateVideoPosition);
+            videoRotXSlider.removeEventListener('input', updateVideoPosition);
+            videoRotYSlider.removeEventListener('input', updateVideoPosition);
+            videoRotZSlider.removeEventListener('input', updateVideoPosition);
 
-            // Add event listeners
+            // Add event listeners to all sliders
             videoXSlider.addEventListener('input', updateVideoPosition);
             videoYSlider.addEventListener('input', updateVideoPosition);
             videoZSlider.addEventListener('input', updateVideoPosition);
             videoScaleSlider.addEventListener('input', updateVideoPosition);
+            videoRotXSlider.addEventListener('input', updateVideoPosition);
+            videoRotYSlider.addEventListener('input', updateVideoPosition);
+            videoRotZSlider.addEventListener('input', updateVideoPosition);
 
-            console.log('✅ Video slider controls (including scale) initialized and connected');
+            console.log('✅ Video slider controls (position, scale, rotation) initialized and connected');
             
-            // Test the sliders with a debug message
+            // Debug listeners
             videoXSlider.addEventListener('input', () => {
                 console.log('🎛️ X slider changed to:', videoXSlider.value);
             });
@@ -1348,67 +1548,103 @@
                 console.log('🎛️ Scale slider changed to:', videoScaleSlider.value);
             });
             
+            videoRotYSlider.addEventListener('input', () => {
+                console.log('🎛️ Rotation Y slider changed to:', videoRotYSlider.value);
+            });
+            
             // Initialize display values
             updateVideoPosition();
         }
 
-        function resetVideoPosition() {
+        /**
+         * Resets video screen to default transform (position, scale, rotation)
+         * Made global for HTML button onclick
+         */
+        function resetVideoTransform() {
+            // Reset position sliders
             document.getElementById('video-x').value = 0;
             document.getElementById('video-y').value = 1;
             document.getElementById('video-z').value = 2;
             document.getElementById('video-scale').value = 1.0;
             
+            // Reset rotation sliders
+            document.getElementById('video-rot-x').value = 0;
+            document.getElementById('video-rot-y').value = 0;
+            document.getElementById('video-rot-z').value = 0;
+            
+            // Update global variables
             videoPosition = { x: 0, y: 1, z: 2 };
             videoScale = 1.0;
+            videoRotation = { x: 0, y: 0, z: 0 };
             
+            // Apply to video screen mesh
             if (videoScreen) {
                 videoScreen.position.set(0, 1, 2);
                 videoScreen.scale.set(1.0, 1.0, 1.0);
-                console.log('📺 Video screen reset to default position (0, 1, 2) and scale (1.0)');
+                videoScreen.rotation.set(0, 0, 0);
+                console.log('📺 Video screen reset to default transform');
             }
             
             // Update display values
             updateVideoPosition();
         }
 
-        window.resetVideoPosition = resetVideoPosition;
+        // Make function global for HTML onclick handler
+        window.resetVideoTransform = resetVideoTransform;
 
+        /**
+         * Creates orbit controls for viewing inside portal scenes
+         * Separate from main gallery controls
+         * @returns {OrbitControls} Controls object
+         */
         function createSplatControls() {
             const controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
             controls.minDistance = 0.5;
             controls.maxDistance = 50;
-            controls.enabled = false;
+            controls.enabled = false;  // Disabled until entering portal
             return controls;
         }
 
         splatControls = createSplatControls();
 
+        /**
+         * Creates a single portal object with frame and Gaussian splat viewer
+         * @param {Object} config - Portal configuration object
+         * @param {number} index - Portal index in array
+         * @returns {Object} Portal object with scene, camera, viewer, etc.
+         */
         async function createPortal(config, index) {
             console.log(`\n🔷 Creating portal ${index}: ${config.name}`);
 
+            // Create separate scene for this portal's content
             const portalScene = new THREE.Scene();
             portalScene.background = new THREE.Color(0x1a1a2a);
             
+            // Create camera for portal's internal view
             const portalCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
             portalCamera.position.set(0, 1, 3);
             portalCamera.lookAt(0, 0, 0);
             
+            // Add lighting to portal scene
             portalScene.add(new THREE.AmbientLight(0xffffff, 0.8));
             const portalDirLight = new THREE.DirectionalLight(0xffffff, 0.5);
             portalDirLight.position.set(5, 5, 5);
             portalScene.add(portalDirLight);
             
+            // Create render target for portal texture (high res for quality)
             const portalRenderTarget = new THREE.WebGLRenderTarget(2048, 2048, {
                 minFilter: THREE.LinearFilter,
                 magFilter: THREE.LinearFilter,
                 format: THREE.RGBAFormat
             });
 
+            // Create portal frame group
             const portalGroup = new THREE.Group();
             portalGroup.position.set(config.position.x, config.position.y, config.position.z);
 
+            // Create dark metallic frame
             const frame = new THREE.Mesh(
                 new THREE.BoxGeometry(1.5, 2.2, 0.1),
                 new THREE.MeshStandardMaterial({ 
@@ -1421,6 +1657,7 @@
             frame.receiveShadow = true;
             portalGroup.add(frame);
 
+            // Create portal surface that displays the splat scene
             const portalSurface = new THREE.Mesh(
                 new THREE.PlaneGeometry(1.3, 2),
                 new THREE.MeshBasicMaterial({ 
@@ -1431,6 +1668,7 @@
             portalSurface.position.z = 0.06;
             portalGroup.add(portalSurface);
 
+            // Create colored glow effect around portal
             const glow = new THREE.Mesh(
                 new THREE.PlaneGeometry(1.4, 2.1),
                 new THREE.MeshBasicMaterial({ 
@@ -1445,6 +1683,7 @@
 
             scene.add(portalGroup);
 
+            // Initialize Gaussian Splat viewer for this portal
             let splatViewer = null;
             try {
                 console.log(`   📄 Loading splat...`);
@@ -1470,6 +1709,7 @@
                 await splatViewer.init();
                 console.log(`   ✅ Viewer initialized`);
 
+                // Load the Gaussian splat file
                 await splatViewer.addSplatScene(config.splatFile, {
                     progressiveLoad: true,
                     splatAlphaRemovalThreshold: 5,
@@ -1484,6 +1724,7 @@
                 console.error(`   ❌ Portal ${index} failed:`, error);
             }
 
+            // Store portal object with all its components
             portals.push({
                 index,
                 config,
@@ -1498,11 +1739,16 @@
             return portals[portals.length - 1];
         }
 
+        /**
+         * Updates portal camera based on main camera position (parallax effect)
+         * @param {Object} portal - Portal object to update
+         */
         function updatePortalCamera(portal) {
             const portalPos = portal.group.position;
             const cameraToPortal = new THREE.Vector3().subVectors(camera.position, portalPos);
             const strength = portal.config.parallaxStrength;
 
+            // Apply parallax offset to portal camera
             portal.camera.position.x = -cameraToPortal.x * strength;
             portal.camera.position.y = cameraToPortal.y * strength + 1;
             portal.camera.position.z = cameraToPortal.z * strength + 5;
@@ -1510,17 +1756,22 @@
         }
 
         // ====== PORTAL INTERACTION ======
+        // Raycasting for click detection
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
+        /**
+         * Handles click events for portal entry and hotspot interaction
+         */
         renderer.domElement.addEventListener('click', (event) => {
+            // Convert mouse position to normalized device coordinates (-1 to +1)
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
 
             if (isInSplatScene) {
-                // Check for hotspot clicks only in portal 1
+                // Inside portal - check for hotspot clicks (only in portal 1)
                 if (activePortalIndex === 1) {
                     const hotspotObjects = [];
                     hotspots.forEach(hotspot => {
@@ -1543,7 +1794,7 @@
                 }
                 
             } else {
-                // Portal clicking logic
+                // Outside portals - check for portal entry clicks
                 portals.forEach((portal) => {
                     const intersects = raycaster.intersectObjects(portal.group.children, true);
                     if (intersects.length > 0) {
@@ -1553,6 +1804,9 @@
             }
         });
 
+        /**
+         * Shows proximity prompt when near portals in gallery view
+         */
         function updatePortalProximity() {
             if (isInSplatScene) return;
 
@@ -1570,27 +1824,36 @@
             }
         }
 
+        /**
+         * Enters a portal scene (switches view to inside portal)
+         * @param {number} portalIndex - Index of portal to enter
+         */
         function enterPortal(portalIndex) {
             console.log(`🚪 Entering portal ${portalIndex}`);
             isInSplatScene = true;
             activePortalIndex = portalIndex;
 
+            // Switch control systems
             controls.enabled = false;
             splatControls.enabled = true;
 
+            // Switch active portal viewer to use main camera
             const activePortal = portals[portalIndex];
             if (activePortal && activePortal.viewer) {
                 activePortal.viewer.camera = camera;
                 console.log('✅ Switched viewer to main camera');
             }
 
+            // Reset camera position for portal view
             camera.position.set(0, 2, 8);
             camera.lookAt(0, 0, 0);
             splatControls.target.set(0, 0, 0);
             splatControls.update();
 
+            // Change background for immersion
             scene.background = new THREE.Color(0x1a1a2a);
 
+            // Hide gallery elements
             floor.visible = false;
             backWall.visible = false;
             leftWall.visible = false;
@@ -1601,7 +1864,7 @@
             spotlight2.visible = false;
             spotlight3.visible = false;
 
-            // Show hotspots only in portal 1
+            // Show hotspots only in portal 1 (middle portal)
             if (portalIndex === 1) {
                 console.log('🎯 Showing hotspots for middle portal');
                 hotspots.forEach((hotspot, index) => {
@@ -1616,6 +1879,7 @@
                 document.getElementById('hotspot-info').classList.add('show');
                 document.getElementById('hotspot-controls').classList.add('show');
             } else {
+                // Hide hotspots in other portals
                 hotspots.forEach(hotspot => {
                     hotspot.sphere.visible = false;
                     hotspot.glow.visible = false;
@@ -1647,6 +1911,7 @@
                 removeVideoFromPortal();
             }
 
+            // Update instructions for current portal
             let instructionText = `
                 <h2>🌀 Inside ${portals[portalIndex].config.name}</h2>
                 <ul>
@@ -1661,7 +1926,7 @@
             
             if (portalIndex === 2) {
                 instructionText += `<li>🎬 Use video controls to start feed!</li>`;
-                instructionText += `<li>📺 Click video screen for interaction!</li>`;
+                instructionText += `<li>📺 Use sliders to position/rotate video!</li>`;
             }
             
             instructionText += `<li>Press ESC to exit</li>
@@ -1672,17 +1937,22 @@
             document.getElementById('portal-prompt').classList.remove('show');
         }
 
+        /**
+         * Exits current portal and returns to gallery view
+         */
         function exitPortal() {
             console.log('🚪 Exiting portal...');
             
+            // Restore portal's original camera
             const activePortal = portals[activePortalIndex];
             if (activePortal && activePortal.viewer) {
                 activePortal.viewer.camera = activePortal.camera;
                 console.log('✅ Restored portal camera');
             }
 
-            // Clean up hotspots from portal scene
+            // Clean up hotspots and audio from portal scene
             if (activePortalIndex === 1 && activePortal && activePortal.scene) {
+                // Stop all playing audio
                 for (let i = 0; i < currentlyPlayingAudio.length; i++) {
                     if (currentlyPlayingAudio[i]) {
                         try {
@@ -1695,6 +1965,7 @@
                     }
                 }
                 
+                // Remove hotspots from portal scene and hide them
                 hotspots.forEach(hotspot => {
                     activePortal.scene.remove(hotspot.sphere);
                     activePortal.scene.remove(hotspot.glow);
@@ -1715,15 +1986,19 @@
             isInSplatScene = false;
             activePortalIndex = -1;
 
+            // Switch back to gallery controls
             controls.enabled = true;
             splatControls.enabled = false;
 
+            // Reset camera to gallery view
             camera.position.set(0, 1.6, 8);
             controls.target.set(0, 0.8, -3);
             controls.update();
 
+            // Restore gallery background
             scene.background = new THREE.Color(0x0a0a0a);
 
+            // Show all gallery elements
             floor.visible = true;
             backWall.visible = true;
             leftWall.visible = true;
@@ -1734,10 +2009,12 @@
             spotlight2.visible = true;
             spotlight3.visible = true;
 
+            // Hide all portal-specific UI
             document.getElementById('hotspot-info').classList.remove('show');
             document.getElementById('hotspot-controls').classList.remove('show');
             document.getElementById('video-controls').classList.remove('show');
 
+            // Restore gallery instructions
             document.getElementById('instructions').innerHTML = `
                 <h2>🌀 Gallery Controls</h2>
                 <ul>
@@ -1749,6 +2026,9 @@
             `;
         }
 
+        /**
+         * Handles ESC key to exit portals
+         */
         window.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && isInSplatScene) {
                 exitPortal();
@@ -1756,10 +2036,14 @@
         });
 
         // ====== ANIMATION LOOP ======
+        /**
+         * Main render loop - updates controls, animations, and renders scenes
+         */
         function animate() {
             requestAnimationFrame(animate);
 
             if (isInSplatScene) {
+                // Inside portal view
                 splatControls.update();
 
                 const activePortal = portals[activePortalIndex];
@@ -1770,14 +2054,16 @@
                     activePortal.viewer.render();
                 }
 
-                // Animate hotspots if visible
+                // Animate hotspots if visible (portal 1)
                 if (activePortalIndex === 1) {
                     const time = Date.now() * 0.002;
                     hotspots.forEach((hotspot, index) => {
                         if (hotspot.sphere.visible && hotspot.sphere.parent === activePortal.scene) {
+                            // Pulse opacity
                             hotspot.sphere.material.opacity = 0.7 + Math.sin(time * 3 + index * 2) * 0.3;
                             hotspot.glow.material.opacity = 0.4 + Math.sin(time * 2 + index * 2) * 0.2;
                             
+                            // Floating animation
                             const baseY = hotspotPositions[index].y;
                             const floatOffset = Math.sin(time * 1.5 + index * 3) * 0.2;
                             hotspot.sphere.position.y = baseY + floatOffset;
@@ -1786,24 +2072,25 @@
                     });
                 }
 
-                // Animate video screen if visible
+                // Update video texture if active (portal 2)
                 if (activePortalIndex === 2 && videoScreen && videoScreen.visible && isVideoActive) {
-                    // No automatic floating animation - user controls position with sliders
-                    // Just update video texture
+                    // Video position is controlled by sliders, no automatic animation
+                    // Just update the video texture
                     if (videoTexture && videoElement) {
-                        // Check if video is actually playing
+                        // Check if video is ready and playing
                         if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA && 
                             !videoElement.paused && 
                             videoElement.currentTime > 0) {
                             videoTexture.needsUpdate = true;
                             
-                            // Debug log occasionally
+                            // Debug log occasionally (every 5 seconds)
                             const time = Date.now() * 0.001;
                             if (Math.floor(time) % 5 === 0 && Math.floor(time * 10) % 10 === 0) {
                                 console.log('🎬 Video texture updated:', {
                                     currentTime: videoElement.currentTime.toFixed(1),
                                     videoSize: `${videoElement.videoWidth}x${videoElement.videoHeight}`,
                                     position: `(${videoScreen.position.x.toFixed(1)}, ${videoScreen.position.y.toFixed(1)}, ${videoScreen.position.z.toFixed(1)})`,
+                                    rotation: `(${(videoScreen.rotation.x * 180 / Math.PI).toFixed(0)}°, ${(videoScreen.rotation.y * 180 / Math.PI).toFixed(0)}°, ${(videoScreen.rotation.z * 180 / Math.PI).toFixed(0)}°)`,
                                     readyState: videoElement.readyState,
                                     paused: videoElement.paused
                                 });
@@ -1819,42 +2106,55 @@
                     }
                 }
             } else {
+                // Gallery view
                 controls.update();
                 updatePortalProximity();
 
+                // Rotate decorative cube
                 cube.rotation.x += 0.005;
                 cube.rotation.y += 0.005;
 
+                // Update all portal cameras and render portal textures
                 portals.forEach(portal => {
                     updatePortalCamera(portal);
 
                     if (portal.viewer) {
                         portal.viewer.update();
                         
+                        // Render portal scene to texture
                         renderer.setRenderTarget(portal.renderTarget);
                         portal.viewer.render();
                         renderer.setRenderTarget(null);
                     }
 
+                    // Animate portal glow
                     const time = Date.now() * 0.001;
                     portal.glow.material.opacity = 0.2 + Math.sin(time * 2 + portal.index) * 0.1;
                 });
 
+                // Render main gallery scene
                 renderer.render(scene, camera);
             }
         }
 
         // ====== INITIALIZATION ======
+        /**
+         * Initializes the entire application
+         * Loads all portals and starts animation loop
+         */
         async function init() {
             document.getElementById('loading-text').textContent = 'Creating portal gallery with video support...';
 
+            // Create interactive hotspots
             createHotspots();
 
+            // Load all portals sequentially
             for (let i = 0; i < PORTAL_CONFIGS.length; i++) {
                 document.getElementById('loading-text').textContent = `Loading portal ${i + 1}/${PORTAL_CONFIGS.length}...`;
                 await createPortal(PORTAL_CONFIGS[i], i);
             }
 
+            // Update UI and start animation
             document.getElementById('portal-count').textContent = portals.length;
             document.getElementById('loading').style.display = 'none';
             document.getElementById('instructions').style.display = 'block';
@@ -1866,13 +2166,17 @@
         }
 
         // ====== WINDOW RESIZE ======
+        /**
+         * Handles window resize events
+         * Updates camera aspect ratio and renderer size
+         */
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // ====== START ======
+        // ====== START APPLICATION ======
         init().catch(err => {
             console.error('Init failed:', err);
             document.getElementById('loading-text').textContent = 'Error: ' + err.message;
